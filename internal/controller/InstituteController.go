@@ -85,14 +85,22 @@ func (cl *InstituteController) GetAllInstitutesController(c fiber.Ctx) error {
 }
 
 func (cl *InstituteController) GetInstituteByIDController(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
 	idstr := c.Params("id")
 	id, err := strconv.ParseUint(idstr, 10, 32)
 	if err != nil {
 		return helper.Error(c, 400, "Invalid institute ID")
 	}
 
-	institute, err := cl.instituteService.GetInstituteServiceById(uint(id))
+	institute, err := cl.instituteService.GetInstituteServiceById(userID, uint(id))
 	if err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(c, 403, "Access denied")
+		}
 		return helper.Error(c, 404, err.Error())
 	}
 
@@ -143,6 +151,11 @@ func (cl *InstituteController) GetInactiveInstituteController(c fiber.Ctx) error
 }
 
 func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
 	idParam := c.Params("id")
 
 	id, err := strconv.ParseUint(idParam, 10, 32)
@@ -162,14 +175,21 @@ func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
 	}
 
 	if err := cl.instituteService.UpdateInstitutionService(
+		userID,
 		uint(id),
 		&body,
 	); err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(c, 403, "Access denied")
+		}
 		return helper.Error(c, 400, err.Error())
 	}
 
-	updated, err := cl.instituteService.GetInstituteServiceById(uint(id))
+	updated, err := cl.instituteService.GetInstituteServiceById(userID, uint(id))
 	if err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(c, 403, "Access denied")
+		}
 		return helper.Error(c, 500, err.Error())
 	}
 
@@ -181,6 +201,11 @@ func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
 }
 
 func (cl *InstituteController) DeleteInstituteController(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
 	idStr := c.Params("id")
 
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -188,7 +213,10 @@ func (cl *InstituteController) DeleteInstituteController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid institute id")
 	}
 
-	if err := cl.instituteService.DeleteInstitutionService(uint(id)); err != nil {
+	if err := cl.instituteService.DeleteInstitutionService(userID, uint(id)); err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(c, 403, "Access denied")
+		}
 		return helper.Error(c, 400, err.Error())
 	}
 

@@ -3,6 +3,7 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
+	"backend_institutions/internal/model"
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
@@ -50,9 +51,17 @@ func (cl *FeesController) CreateFeesController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
+	var feeObj = model.Fees{
+		PaymentMode:   body.PaymentMode,
+		TotalAmount:   body.TotalAmount,
+		StudentID:     body.StudentID,
+		TotalPaid:     0,
+		PendingAmount: body.TotalAmount,
+	}
+
 	fees, err := cl.feesService.CreateFeesService(
 		userID,
-		&body,
+		&feeObj,
 	)
 	if err != nil {
 
@@ -250,6 +259,11 @@ func (cl *FeesController) FetchAllFeesController(c fiber.Ctx) error {
 }
 
 func (cl *FeesController) GetPaymentByIDController(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
 	idStr := c.Params("id")
 
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -257,8 +271,11 @@ func (cl *FeesController) GetPaymentByIDController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid payment id")
 	}
 
-	payment, err := cl.feesService.GetPaymentByIDService(uint(id))
+	payment, err := cl.feesService.GetPaymentByID(userID, uint(id))
 	if err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(c, 403, "Access denied")
+		}
 		return helper.Error(c, 404, err.Error())
 	}
 
@@ -270,6 +287,11 @@ func (cl *FeesController) GetPaymentByIDController(c fiber.Ctx) error {
 }
 
 func (cl *FeesController) GetPaymentByFeeIDController(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
 	feeIDStr := c.Params("fee_id")
 
 	feeID, err := strconv.ParseUint(feeIDStr, 10, 32)
@@ -277,8 +299,11 @@ func (cl *FeesController) GetPaymentByFeeIDController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid fee id")
 	}
 
-	payments, err := cl.feesService.GetPaymentByFeeIDService(uint(feeID))
+	payments, err := cl.feesService.GetPaymentByFeeID(userID, uint(feeID))
 	if err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(c, 403, "Access denied")
+		}
 		return helper.Error(c, 404, err.Error())
 	}
 
@@ -308,7 +333,7 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 		return helper.Error(ctx, 400, err.Error())
 	}
 
-	payment, err := c.feesService.CreatePaymentService(
+	payment, err := c.feesService.CreatePayment(
 		userID,
 		&req,
 	)
@@ -329,7 +354,7 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 }
 
 func (c *StudentController) FetchPaidStudents(ctx fiber.Ctx) error {
-	students, err := c.studentService.FetchPaidStudents()
+	students, err := c.studentService.FetchPaidStudentsService()
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
 	}
@@ -338,7 +363,7 @@ func (c *StudentController) FetchPaidStudents(ctx fiber.Ctx) error {
 }
 
 func (c *StudentController) FetchNotPaidStudents(ctx fiber.Ctx) error {
-	students, err := c.studentService.FetchNotPaidStudents()
+	students, err := c.studentService.FetchNotPaidStudentsService()
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
 	}
@@ -347,14 +372,21 @@ func (c *StudentController) FetchNotPaidStudents(ctx fiber.Ctx) error {
 }
 
 func (c *FeesController) FetchFeesByStudentID(ctx fiber.Ctx) error {
+	userID, ok := ctx.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(ctx, 401, "Invalid user")
+	}
 
 	id, err := strconv.ParseUint(ctx.Params("id"), 10, 64)
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusBadRequest, "Invalid student id")
 	}
 
-	fees, err := c.feesService.FetchFeesByStudentID(uint(id))
+	fees, err := c.feesService.FetchFeesByStudentID(userID, uint(id))
 	if err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(ctx, 403, "Access denied")
+		}
 		return helper.Error(ctx, fiber.StatusNotFound, "Fees not found")
 	}
 

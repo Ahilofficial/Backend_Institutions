@@ -114,7 +114,7 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	return helper.Success(
 		c,
 		"Student fetched successfully",
-		dto.ToStudentResponseDTO(&student),
+		dto.ToStudentResponseDTO(student),
 	)
 }
 
@@ -173,7 +173,7 @@ func (cl *StudentController) UpdateStudentControllers(c fiber.Ctx) error {
 	return helper.Success(
 		c,
 		"Student updated successfully",
-		dto.ToStudentResponseDTO(&updated),
+		dto.ToStudentResponseDTO(updated),
 	)
 }
 
@@ -211,7 +211,7 @@ func (cl *StudentController) DeleteStudentControllers(c fiber.Ctx) error {
 }
 
 func (cl *StudentController) FetchAllStudentsControllers(c fiber.Ctx) error {
-	students, err := cl.studentService.GetStudentService()
+	students, err := cl.studentService.FetchAllStudentsServices()
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -243,7 +243,7 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 		}
 	}
 
-	students, total, err := cl.studentService.GetStudentServicePaginated(search, page, limit)
+	students, total, err := cl.studentService.FetchAllStudentsPaginatedServices(search, page, limit)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -270,7 +270,7 @@ func (c *StudentController) FetchStudentsByPaymentMonth(ctx fiber.Ctx) error {
 		return helper.Error(ctx, fiber.StatusBadRequest, "month is required")
 	}
 
-	students, err := c.studentService.FetchStudentsByPaymentMonth(month)
+	students, err := c.studentService.FetchStudentsByPaymentMonthService(month)
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
 	}

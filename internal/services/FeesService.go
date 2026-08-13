@@ -1,11 +1,10 @@
 package services
 
 import (
-	"errors"
-
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
+	"errors"
 )
 
 type FeesService struct {
@@ -17,7 +16,7 @@ type FeesService struct {
 func NewFeesService(
 	feesRepo *repository.FeesRepository,
 	studentRepo *repository.StudentRepository,
-	userRepo *repository.UserRepository,
+	userRepo    *repository.UserRepository,
 ) *FeesService {
 	return &FeesService{
 		feesRepo:    feesRepo,
@@ -30,7 +29,6 @@ func (s *FeesService) checkInstitutionAccess(
 	userID uint,
 	institutionID uint,
 ) error {
-
 	hasAccess, err := s.userRepo.HasInstitutionAccess(
 		userID,
 		institutionID,
@@ -50,11 +48,11 @@ func (s *FeesService) checkInstitutionAccess(
 
 func (s *FeesService) CreateFeesService(
 	userID uint,
-	req *dto.CreateFeesDTO,
+	fee *model.Fees,
 ) (model.Fees, error) {
 
 	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		req.StudentID,
+		fee.StudentID,
 	)
 	if err != nil {
 		return model.Fees{}, err
@@ -67,19 +65,11 @@ func (s *FeesService) CreateFeesService(
 		return model.Fees{}, err
 	}
 
-	fees := model.Fees{
-		PaymentMode:   req.PaymentMode,
-		TotalAmount:   req.TotalAmount,
-		TotalPaid:     0,
-		PendingAmount: req.TotalAmount,
-		StudentID:     req.StudentID,
-	}
-
-	if err := s.feesRepo.CreateFees(&fees); err != nil {
+	if err := s.feesRepo.CreateFees(fee); err != nil {
 		return model.Fees{}, err
 	}
 
-	return fees, nil
+	return *fee, nil
 }
 
 func (s *FeesService) GetFeesService() ([]model.Fees, error) {
@@ -91,6 +81,7 @@ func (s *FeesService) GetFeesServicePaginated(
 	page int,
 	limit int,
 ) ([]model.Fees, int64, error) {
+
 	return s.feesRepo.FetchFeesPaginated(
 		search,
 		page,
@@ -102,14 +93,18 @@ func (s *FeesService) GetFeesServiceById(
 	userID uint,
 	id uint,
 ) (model.Fees, error) {
-
-	fees, err := s.feesRepo.FetchFeesById(id)
+	fee, err := s.feesRepo.FetchFeesById(id)
 	if err != nil {
 		return model.Fees{}, err
 	}
 
+	user, err := s.userRepo.FindByID(userID)
+	if err == nil && user.StudentID > 0 && user.StudentID != fee.StudentID {
+		return model.Fees{}, errors.New("access denied")
+	}
+
 	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fees.StudentID,
+		fee.StudentID,
 	)
 	if err != nil {
 		return model.Fees{}, err
@@ -122,7 +117,42 @@ func (s *FeesService) GetFeesServiceById(
 		return model.Fees{}, err
 	}
 
-	return fees, nil
+	return fee, nil
+}
+
+func (s *FeesService) UpdateFeesService(
+	userID uint,
+	id uint,
+	dto *dto.UpdateFeesDTO,
+) error {
+
+	fee, err := s.feesRepo.FetchFeesById(id)
+	if err != nil {
+		return err
+	}
+
+	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
+		fee.StudentID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := s.checkInstitutionAccess(
+		userID,
+		institutionID,
+	); err != nil {
+		return err
+	}
+
+	if dto.Amount != 0 {
+		fee.TotalAmount = dto.Amount
+	}
+	if dto.PaymentMode != "" {
+		fee.PaymentMode = dto.PaymentMode
+	}
+
+	return s.feesRepo.UpdateFeesById(&fee)
 }
 
 func (s *FeesService) DeleteFeesService(
@@ -130,13 +160,13 @@ func (s *FeesService) DeleteFeesService(
 	id uint,
 ) error {
 
-	fees, err := s.feesRepo.FetchFeesById(id)
+	fee, err := s.feesRepo.FetchFeesById(id)
 	if err != nil {
 		return err
 	}
 
 	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fees.StudentID,
+		fee.StudentID,
 	)
 	if err != nil {
 		return err
@@ -156,62 +186,12 @@ func (s *FeesService) GetInactiveFeesService() ([]model.Fees, error) {
 	return s.feesRepo.FetchInactiveFees()
 }
 
-func (s *FeesService) UpdateFeesService(
+func (s *FeesService) CreatePayment(
 	userID uint,
-	id uint,
-	req *dto.UpdateFeesDTO,
-) error {
-
-	fees, err := s.feesRepo.FetchFeesById(id)
-	if err != nil {
-		return err
-	}
-
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fees.StudentID,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
-	}
-
-	fees.PaymentMode = req.PaymentMode
-	fees.TotalAmount = req.Amount
-	fees.PendingAmount = fees.TotalAmount - fees.TotalPaid
-
-	if fees.PendingAmount < 0 {
-		return errors.New(
-			"total amount cannot be less than total paid",
-		)
-	}
-
-	return s.feesRepo.UpdateFeesById(&fees)
-}
-
-func (s *FeesService) GetPaymentByIDService(
-	id uint,
-) (model.Payment, error) {
-	return s.feesRepo.FetchPaymentByID(id)
-}
-
-func (s *FeesService) GetPaymentByFeeIDService(
-	feeID uint,
-) ([]model.Payment, error) {
-	return s.feesRepo.FetchPaymentByFeeID(feeID)
-}
-
-func (s *FeesService) CreatePaymentService(
-	userID uint,
-	req *dto.CreatePaymentDTO,
+	dto *dto.CreatePaymentDTO,
 ) (model.Payment, error) {
 
-	fee, err := s.feesRepo.FetchFeesById(req.FeeID)
+	fee, err := s.feesRepo.FetchFeesById(dto.FeeID)
 	if err != nil {
 		return model.Payment{}, err
 	}
@@ -230,41 +210,100 @@ func (s *FeesService) CreatePaymentService(
 		return model.Payment{}, err
 	}
 
-	if req.AmountPaid <= 0 {
-		return model.Payment{}, errors.New(
-			"payment amount must be greater than zero",
-		)
-	}
-
-	if req.AmountPaid > fee.PendingAmount {
-		return model.Payment{}, errors.New(
-			"payment amount exceeds pending amount",
-		)
-	}
-
 	payment := model.Payment{
-		Month:       req.Month,
-		AmountPaid:  req.AmountPaid,
-		PaymentMode: req.PaymentMode,
-		FeeID:       req.FeeID,
+		FeeID:      dto.FeeID,
+		AmountPaid: dto.AmountPaid,
+		Month:      dto.Month,
 	}
 
 	if err := s.feesRepo.CreatePayment(&payment); err != nil {
 		return model.Payment{}, err
 	}
 
-	fee.TotalPaid += req.AmountPaid
-	fee.PendingAmount = fee.TotalAmount - fee.TotalPaid
+	return payment, nil
+}
 
-	if err := s.feesRepo.UpdateFeesById(&fee); err != nil {
+func (s *FeesService) GetPaymentByID(
+	userID uint,
+	id uint,
+) (model.Payment, error) {
+
+	payment, err := s.feesRepo.FetchPaymentByID(id)
+	if err != nil {
+		return model.Payment{}, err
+	}
+
+	fee, err := s.feesRepo.FetchFeesById(payment.FeeID)
+	if err != nil {
+		return model.Payment{}, err
+	}
+
+	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
+		fee.StudentID,
+	)
+	if err != nil {
+		return model.Payment{}, err
+	}
+
+	if err := s.checkInstitutionAccess(
+		userID,
+		institutionID,
+	); err != nil {
 		return model.Payment{}, err
 	}
 
 	return payment, nil
 }
 
+func (s *FeesService) GetPaymentByFeeID(
+	userID uint,
+	feeID uint,
+) ([]model.Payment, error) {
+
+	fee, err := s.feesRepo.FetchFeesById(feeID)
+	if err != nil {
+		return nil, err
+	}
+
+	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
+		fee.StudentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.checkInstitutionAccess(
+		userID,
+		institutionID,
+	); err != nil {
+		return nil, err
+	}
+
+	return s.feesRepo.FetchPaymentByFeeID(feeID)
+}
+
 func (s *FeesService) FetchFeesByStudentID(
+	userID uint,
 	studentID uint,
 ) (*model.Fees, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err == nil && user.StudentID > 0 && user.StudentID != studentID {
+		return nil, errors.New("access denied")
+	}
+
+	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
+		studentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.checkInstitutionAccess(
+		userID,
+		institutionID,
+	); err != nil {
+		return nil, err
+	}
+
 	return s.feesRepo.FetchFeesByStudentID(studentID)
 }

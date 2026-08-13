@@ -1,11 +1,10 @@
 package services
 
 import (
-	"errors"
-
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
+	"errors"
 )
 
 type FacultyService struct {
@@ -26,27 +25,23 @@ func NewFacultyService(
 	}
 }
 
-func (s *FacultyService) checkInstitutionAccess(userID uint, institutionID uint) error {
-
-	hasAccess, err := s.userRepo.HasInstitutionAccess(
-		userID,
-		institutionID,
-	)
+func (s *FacultyService) checkInstitutionAccess(
+	userID uint,
+	institutionID uint,
+) error {
+	hasAccess, err := s.userRepo.HasInstitutionAccess(userID, institutionID)
 	if err != nil {
 		return err
 	}
 
 	if !hasAccess {
-		return errors.New(
-			"user does not have access to this institution",
-		)
+		return errors.New("access denied")
 	}
 
 	return nil
 }
 
 func (s *FacultyService) CreateFacultyService(userID uint, faculty *model.Faculty) (model.Faculty, error) {
-
 	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
 		faculty.DepartmentID,
 	)
@@ -108,13 +103,21 @@ func (s *FacultyService) GetFacultyServicePaginated(
 }
 
 func (s *FacultyService) GetFacultyServiceById(userID uint, id uint) (*model.Faculty, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err == nil && user.FacultyID > 0 {
+		if user.FacultyID != id {
+			return nil, errors.New("access denied")
+		}
+	}
 
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return nil, err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
+	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
+		faculty.DepartmentID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -133,19 +136,10 @@ func (s *FacultyService) GetFacultyServiceDeleted() ([]model.Faculty, error) {
 	return s.facultyRepo.FetchFacultyDeleted()
 }
 
-func (s *FacultyService) GetActiveFacultyService() (model.Faculty, error) {
-	return s.facultyRepo.GetActiveFaculty()
-}
-
-func (s *FacultyService) GetInactiveFacultyService() (model.Faculty, error) {
-	return s.facultyRepo.GetInactiveFaculty()
-}
-
 func (s *FacultyService) DeleteFacultyService(
 	userID uint,
 	id uint,
 ) error {
-
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
@@ -168,10 +162,18 @@ func (s *FacultyService) DeleteFacultyService(
 	return s.facultyRepo.DeleteFaculty(id)
 }
 
+func (s *FacultyService) GetActiveFacultyService() (model.Faculty, error) {
+	return s.facultyRepo.GetActiveFaculty()
+}
+
+func (s *FacultyService) GetInactiveFacultyService() (model.Faculty, error) {
+	return s.facultyRepo.GetInactiveFaculty()
+}
+
 func (s *FacultyService) UpdateFacultyService(
 	userID uint,
 	id uint,
-	req *dto.UpdateFacultyDTO,
+	dto *dto.UpdateFacultyDTO,
 ) error {
 
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
@@ -193,8 +195,12 @@ func (s *FacultyService) UpdateFacultyService(
 		return err
 	}
 
-	faculty.Name = req.Name
-	faculty.Gender = req.Gender
+	if dto.Name != "" {
+		faculty.Name = dto.Name
+	}
+	if dto.Gender != "" {
+		faculty.Gender = dto.Gender
+	}
 
 	return s.facultyRepo.UpdateFacultyById(&faculty)
 }

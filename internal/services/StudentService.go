@@ -1,11 +1,10 @@
 package services
 
 import (
-	"errors"
-
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
+	"errors"
 )
 
 type StudentService struct {
@@ -17,7 +16,7 @@ type StudentService struct {
 func NewStudentService(
 	studentRepo *repository.StudentRepository,
 	facultyRepo *repository.FacultyRepository,
-	userRepo *repository.UserRepository,
+	userRepo    *repository.UserRepository,
 ) *StudentService {
 	return &StudentService{
 		studentRepo: studentRepo,
@@ -92,16 +91,16 @@ func (s *StudentService) CreateStudentService(
 
 	return student, nil
 }
-func (s *StudentService) GetStudentService() ([]model.Student, error) {
+
+func (s *StudentService) FetchAllStudentsServices() ([]model.Student, error) {
 	return s.studentRepo.FetchStudent()
 }
 
-func (s *StudentService) GetStudentServicePaginated(
+func (s *StudentService) FetchAllStudentsPaginatedServices(
 	search string,
 	page int,
 	limit int,
 ) ([]model.Student, int64, error) {
-
 	return s.studentRepo.FetchStudentPaginated(
 		search,
 		page,
@@ -112,32 +111,103 @@ func (s *StudentService) GetStudentServicePaginated(
 func (s *StudentService) GetStudentServiceById(
 	userID uint,
 	id uint,
-) (model.Student, error) {
+) (*model.Student, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err == nil && user.StudentID > 0 {
+		if user.StudentID != id {
+			return nil, errors.New("access denied")
+		}
+	}
 
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil {
-		return model.Student{}, err
+		return nil, err
+	}
+
+	if err == nil && user.FacultyID > 0 {
+		if student.FacultyID != user.FacultyID {
+			return nil, errors.New("access denied")
+		}
 	}
 
 	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
 		student.FacultyID,
 	)
 	if err != nil {
-		return model.Student{}, err
+		return nil, err
 	}
 
 	if err := s.checkInstitutionAccess(
 		userID,
 		institutionID,
 	); err != nil {
-		return model.Student{}, err
+		return nil, err
 	}
 
-	return student, nil
+	return &student, nil
 }
 
-func (s *StudentService) GetStudentServiceDeleted() ([]model.Student, error) {
-	return s.studentRepo.FetchStudentDeleted()
+func (s *StudentService) FetchStudentsByPaymentMonthService(
+	month string,
+) ([]model.Student, error) {
+
+	return s.studentRepo.FetchStudentsByPaymentMonth(month)
+}
+
+func (s *StudentService) FetchPaidStudentsService() ([]model.Student, error) {
+
+	return s.studentRepo.FetchPaidStudents()
+}
+
+func (s *StudentService) FetchNotPaidStudentsService() ([]model.Student, error) {
+
+	return s.studentRepo.FetchNotPaidStudents()
+}
+
+func (s *StudentService) GetActiveStudentService() (model.Student, error) {
+	return s.studentRepo.GetActiveStudent()
+}
+
+func (s *StudentService) GetInactiveStudentService() (model.Student, error) {
+	return s.studentRepo.GetInactiveStudent()
+}
+
+func (s *StudentService) UpdateStudentService(
+	userID uint,
+	id uint,
+	dto *dto.UpdateStudentDTO,
+) error {
+
+	student, err := s.studentRepo.FetchStudentById(id)
+	if err != nil {
+		return err
+	}
+
+	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
+		student.FacultyID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := s.checkInstitutionAccess(
+		userID,
+		institutionID,
+	); err != nil {
+		return err
+	}
+
+	if dto.Name != "" {
+		student.Name = dto.Name
+	}
+	if dto.Email != "" {
+		student.Email = dto.Email
+	}
+	if dto.Gender != "" {
+		student.Gender = dto.Gender
+	}
+
+	return s.studentRepo.UpdateStudentById(&student)
 }
 
 func (s *StudentService) DeleteStudentService(
@@ -165,66 +235,4 @@ func (s *StudentService) DeleteStudentService(
 	}
 
 	return s.studentRepo.DeleteStudent(id)
-}
-
-func (s *StudentService) UpdateStudentService(
-	userID uint,
-	id uint,
-	req *dto.UpdateStudentDTO,
-) error {
-
-	student, err := s.studentRepo.FetchStudentById(id)
-	if err != nil {
-		return err
-	}
-
-	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
-		student.FacultyID,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
-	}
-
-	student.Name = req.Name
-	student.Email = req.Email
-	student.Gender = req.Gender
-
-	return s.studentRepo.UpdateStudentById(&student)
-}
-
-func (s *StudentService) GetActiveStudentService() (model.Student, error) {
-	return s.studentRepo.GetActiveStudent()
-}
-
-func (s *StudentService) GetInactiveStudentService() (model.Student, error) {
-	return s.studentRepo.GetInactiveStudent()
-}
-
-func (s *StudentService) FetchStudentsByPaymentMonth(
-	month string,
-) ([]model.Student, error) {
-
-	return s.studentRepo.FetchStudentsByPaymentMonth(month)
-}
-
-func (s *StudentService) FetchPaidStudents() ([]model.Student, error) {
-	return s.studentRepo.FetchPaidStudents()
-}
-
-func (s *StudentService) FetchNotPaidStudents() ([]model.Student, error) {
-	return s.studentRepo.FetchNotPaidStudents()
-}
-
-func (s *StudentService) GetInstitutionID(
-	studentID uint,
-) (uint, error) {
-
-	return s.studentRepo.GetInstitutionIDByStudent(studentID)
 }

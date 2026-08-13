@@ -25,19 +25,17 @@ func NewPrincipalService(
 	}
 }
 
-func (s *PrincipalService) checkInstitutionAccess(userID uint, institutionID uint) error {
-	hasAccess, err := s.userRepo.HasInstitutionAccess(
-		userID,
-		institutionID,
-	)
+func (s *PrincipalService) checkInstitutionAccess(
+	userID uint,
+	institutionID uint,
+) error {
+	hasAccess, err := s.userRepo.HasInstitutionAccess(userID, institutionID)
 	if err != nil {
 		return err
 	}
 
 	if !hasAccess {
-		return errors.New(
-			"user does not have access to this institution",
-		)
+		return errors.New("access denied")
 	}
 
 	return nil
@@ -105,12 +103,21 @@ func (s *PrincipalService) GetPrincipalServicePaginated(
 }
 
 func (s *PrincipalService) GetPrincipalServiceById(userID uint, id uint) (*model.Principal, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err == nil && user.PrincipalID > 0 {
+		if user.PrincipalID != id {
+			return nil, errors.New("access denied")
+		}
+	}
+
 	principal, err := s.principalRepo.FetchPrincipalById(id)
 	if err != nil {
 		return nil, err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(principal.DepartmentID)
+	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
+		principal.DepartmentID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -127,14 +134,6 @@ func (s *PrincipalService) GetPrincipalServiceById(userID uint, id uint) (*model
 
 func (s *PrincipalService) GetPrincipalServiceDeleted() ([]model.Principal, error) {
 	return s.principalRepo.FetchPrincipalDeleted()
-}
-
-func (s *PrincipalService) GetActivePrincipalService() (model.Principal, error) {
-	return s.principalRepo.GetActivePrincipal()
-}
-
-func (s *PrincipalService) GetInactivePrincipalService() (model.Principal, error) {
-	return s.principalRepo.GetInactivePrincipal()
 }
 
 func (s *PrincipalService) DeletePrincipalService(
@@ -163,11 +162,20 @@ func (s *PrincipalService) DeletePrincipalService(
 	return s.principalRepo.DeletePrincipal(id)
 }
 
+func (s *PrincipalService) GetActivePrincipalService() (model.Principal, error) {
+	return s.principalRepo.GetActivePrincipal()
+}
+
+func (s *PrincipalService) GetInactivePrincipalService() (model.Principal, error) {
+	return s.principalRepo.GetInactivePrincipal()
+}
+
 func (s *PrincipalService) UpdatePrincipalService(
 	userID uint,
 	id uint,
-	req *dto.UpdatePrincipalDTO,
+	dto *dto.UpdatePrincipalDTO,
 ) error {
+
 	principal, err := s.principalRepo.FetchPrincipalById(id)
 	if err != nil {
 		return err
@@ -187,8 +195,12 @@ func (s *PrincipalService) UpdatePrincipalService(
 		return err
 	}
 
-	principal.Name = req.Name
-	principal.Gender = req.Gender
+	if dto.Name != "" {
+		principal.Name = dto.Name
+	}
+	if dto.Gender != "" {
+		principal.Gender = dto.Gender
+	}
 
 	return s.principalRepo.UpdatePrincipalById(&principal)
 }

@@ -25,7 +25,7 @@ func InitializeApp() (*fiber.App, error) {
 	userService := services.NewUserService(userRepository, sessionService)
 	userController := controller.NewUserController(userService)
 	institutionRepository := repository.NewInstitutionRepository(db)
-	instituteService := services.NewInstituteService(institutionRepository)
+	instituteService := services.NewInstituteService(institutionRepository, userRepository)
 	instituteController := controller.NewInstituteController(instituteService)
 	departmentRepository := repository.NewDepartmentRepository(db)
 	departmentService := services.NewDepartmentService(departmentRepository, userRepository)
@@ -35,7 +35,7 @@ func InitializeApp() (*fiber.App, error) {
 	facultyController := controller.NewFacultyController(facultyService)
 	principalRepository := repository.NewPrincipalRepository(db)
 	principalService := services.NewPrincipalService(principalRepository, departmentRepository, userRepository)
-	principalController := controller.NewPrincipalControllers(principalService)
+	principalControllers := controller.NewPrincipalControllers(principalService)
 	studentRepository := repository.NewStudentRepository(db)
 	studentService := services.NewStudentService(studentRepository, facultyRepository, userRepository)
 	studentController := controller.NewStudentController(studentService)
@@ -51,6 +51,6 @@ func InitializeApp() (*fiber.App, error) {
 	menuRepository := repository.NewMenuRepository(db)
 	menuService := services.NewMenuService(menuRepository)
 	menuController := controller.NewMenuController(menuService)
-	app := routes.NewApp(userController, instituteController, departmentController, facultyController, principalController, studentController, departmentService, facultyService, principalService, studentService, feesController, roleController, permissionController, menuController, studentRepository, facultyRepository, principalRepository, departmentRepository, feesRepository, userRepository)
+	app := routes.NewApp(userController, instituteController, departmentController, facultyController, principalControllers, studentController, departmentService, facultyService, principalService, studentService, feesController, roleController, permissionController, menuController, studentRepository, facultyRepository, principalRepository, departmentRepository, feesRepository, userRepository)
 	return app, nil
 }

@@ -159,9 +159,7 @@ func (r *DepartmentRepository) GetActiveDepartment() (model.Department, error) {
 		return model.Department{}, gorm.ErrRecordNotFound
 	}
 
-	if err != nil {
-		return model.Department{}, err
-	}
+	
 	return depts[0], nil
 }
 
