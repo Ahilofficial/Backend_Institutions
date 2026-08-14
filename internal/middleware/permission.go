@@ -25,17 +25,10 @@ func RequirePermission(permission string) fiber.Handler {
 			SELECT EXISTS (
 				SELECT 1
 				FROM users u
-				LEFT JOIN user_roles ur ON ur.user_id = u.id
-				LEFT JOIN roles r ON r.id = ur.role_id
-				LEFT JOIN role_permissions rp ON rp.role_id = ur.role_id
-				LEFT JOIN permissions p ON p.id = rp.permission_id
-				WHERE u.id = ?
-				  AND (
-					p.name = ?
-					OR LOWER(u.email) = 'ahilcicillin@gmail.com'
-					OR LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin', 'admin')
-					OR LOWER(r.name) LIKE '%super%admin%'
-				  )
+				JOIN user_roles ur ON ur.user_id = u.id
+				JOIN role_permissions rp ON rp.role_id = ur.role_id
+				JOIN permissions p ON p.id = rp.permission_id
+				WHERE u.id = ? AND p.name = ?
 			)
 		`
 

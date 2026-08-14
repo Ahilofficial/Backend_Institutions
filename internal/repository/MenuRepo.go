@@ -16,28 +16,7 @@ func NewMenuRepository(db *gorm.DB) *MenuRepository {
 }
 
 func (r *MenuRepository) GetMenusByUser(userID uint) ([]model.Menu, error) {
-
 	var menus []model.Menu
-
-	var isSuper bool
-	superQuery := `
-		SELECT EXISTS (
-			SELECT 1
-			FROM users u
-			LEFT JOIN user_roles ur ON ur.user_id = u.id
-			LEFT JOIN roles r ON r.id = ur.role_id
-			WHERE u.id = ?
-			  AND (
-				LOWER(u.email) = 'ahilcicillin@gmail.com'
-				OR LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin', 'admin')
-				OR LOWER(r.name) LIKE '%super%admin%'
-			  )
-		)
-	`
-	if err := database.DB.Raw(superQuery, userID).Scan(&isSuper).Error; err == nil && isSuper {
-		err := database.DB.Raw("SELECT id, name, route, icon, parent_id FROM menus ORDER BY CASE WHEN parent_id IS NULL THEN id ELSE parent_id END, id").Scan(&menus).Error
-		return menus, err
-	}
 
 	query := `
 	SELECT

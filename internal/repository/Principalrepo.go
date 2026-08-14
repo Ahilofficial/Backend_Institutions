@@ -28,9 +28,9 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 
 	res, err := db.Exec(
 		`INSERT INTO principals
-			(name, gender, joining_date, department_id, user_id, created_at, updated_at, is_active)
+			(name, gender, joining_date, institution_id, user_id, created_at, updated_at, is_active)
 		SELECT ?, ?, ?, id, ?, ?, ?, ?
-		FROM departments
+		FROM institutions
 		WHERE id = ?
 		  AND deleted_at IS NULL
 		  AND is_active = true
@@ -38,7 +38,7 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 			  SELECT 1
 			  FROM principals
 			  WHERE name = ?
-			    AND department_id = ?
+			    AND institution_id = ?
 			    AND deleted_at IS NULL
 		  )`,
 		principal.Name,
@@ -48,9 +48,9 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 		now,
 		now,
 		true,
-		principal.DepartmentID,
+		principal.InstitutionID,
 		principal.Name,
-		principal.DepartmentID,
+		principal.InstitutionID,
 	)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 	}
 
 	if rows == 0 {
-		return errors.New("principal name already exists in this department, or parent department is inactive/invalid")
+		return errors.New("principal name already exists in this institution, or parent institution is inactive/invalid")
 	}
 
 	id, err := res.LastInsertId()
@@ -223,22 +223,19 @@ func (r *PrincipalRepository) GetInstitutionByPrincipalID(principalID uint) (uin
 	return institutionID, nil
 }
 
-func (r *PrincipalRepository) GetInstitutionByDepartmentID(departmentID uint) (uint, error) {
+func (r *PrincipalRepository) GetInstitutionIDByPrincipal(principalID uint) (uint, error) {
 	var institutionID uint
 
 	err := r.db.Raw(`
 		SELECT institution_id
-		FROM departments
+		FROM principals
 		WHERE id = ?
+		  AND deleted_at IS NULL
 		LIMIT 1
-	`, departmentID).Scan(&institutionID).Error
+	`, principalID).Scan(&institutionID).Error
 
 	if err != nil {
 		return 0, err
-	}
-
-	if institutionID == 0 {
-		return 0, errors.New("institution not found")
 	}
 
 	return institutionID, nil

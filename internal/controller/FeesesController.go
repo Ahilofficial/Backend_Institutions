@@ -7,6 +7,7 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -65,8 +66,8 @@ func (cl *FeesController) CreateFeesController(c fiber.Ctx) error {
 	)
 	if err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.HasPrefix(err.Error(), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 400, err.Error())
@@ -138,8 +139,8 @@ func (cl *FeesController) GetFeesByIDController(c fiber.Ctx) error {
 	)
 	if err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.HasPrefix(err.Error(), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 404, err.Error())
@@ -184,22 +185,21 @@ func (cl *FeesController) UpdateFeesController(c fiber.Ctx) error {
 		&body,
 	); err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.HasPrefix(err.Error(), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// Get updated fee.
 	updated, err := cl.feesService.GetFeesServiceById(
 		userID,
 		uint(id),
 	)
 	if err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.HasPrefix(err.Error(), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 500, err.Error())
@@ -231,8 +231,8 @@ func (cl *FeesController) DeleteFeesController(c fiber.Ctx) error {
 		uint(id),
 	); err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.HasPrefix(err.Error(), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 400, err.Error())
@@ -339,8 +339,8 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 	)
 	if err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(ctx, 403, "Access denied")
+		if strings.HasPrefix(err.Error(), "access denied") {
+			return helper.Error(ctx, 403, err.Error())
 		}
 
 		return helper.Error(ctx, 400, err.Error())
@@ -354,21 +354,27 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 }
 
 func (c *StudentController) FetchPaidStudents(ctx fiber.Ctx) error {
-	students, err := c.studentService.FetchPaidStudentsService()
+	userID, _ := ctx.Locals("user_id").(uint)
+	month := ctx.Query("month")
+
+	students, err := c.studentService.FetchPaidStudentsService(userID, month)
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
 	}
 
-	return helper.Success(ctx, "Paid students fetched successfully", students)
+	return helper.Success(ctx, "Paid students fetched successfully", dto.ToStudentResponseListDTO(students))
 }
 
 func (c *StudentController) FetchNotPaidStudents(ctx fiber.Ctx) error {
-	students, err := c.studentService.FetchNotPaidStudentsService()
+	userID, _ := ctx.Locals("user_id").(uint)
+	month := ctx.Query("month")
+
+	students, err := c.studentService.FetchNotPaidStudentsService(userID, month)
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
 	}
 
-	return helper.Success(ctx, "Not paid students fetched successfully", students)
+	return helper.Success(ctx, "Not paid students fetched successfully", dto.ToStudentResponseListDTO(students))
 }
 
 func (c *FeesController) FetchFeesByStudentID(ctx fiber.Ctx) error {

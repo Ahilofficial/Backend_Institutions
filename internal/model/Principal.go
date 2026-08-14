@@ -16,9 +16,9 @@ type Principal struct {
 	DeletedAt   gorm.DeletedAt `json:"-"`
 	IsActive    bool           `gorm:"default:true" json:"isactive"`
 
-	DepartmentID uint `json:"department_id"`
-	UserID       uint `json:"user_id"`
+	InstitutionID uint `json:"institution_id"`
+	UserID        uint `json:"user_id"`
 
-	Department *Department `gorm:"foreignKey:DepartmentID;references:ID" json:"department,omitempty"`
-	User       *User       `gorm:"foreignKey:UserID;references:ID" json:"user,omitempty"`
+	Institution *Institutions `gorm:"foreignKey:InstitutionID;references:ID" json:"institution,omitempty"`
+	User        *User        `gorm:"foreignKey:UserID;references:ID" json:"user,omitempty"`
 }

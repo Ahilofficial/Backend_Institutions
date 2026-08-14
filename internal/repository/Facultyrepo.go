@@ -228,30 +228,6 @@ func (r *FacultyRepository) GetInstitutionByFacultyID(facultyID uint) (uint, err
 	return institutionID, nil
 }
 
-func (r *FacultyRepository) GetInstitutionByDepartmentID(
-	departmentID uint,
-) (uint, error) {
-
-	var institutionID uint
-
-	err := r.db.Raw(`
-		SELECT institution_id
-		FROM departments
-		WHERE id = ?
-		LIMIT 1
-	`, departmentID).Scan(&institutionID).Error
-
-	if err != nil {
-		return 0, err
-	}
-
-	if institutionID == 0 {
-		return 0, errors.New("institution not found")
-	}
-
-	return institutionID, nil
-}
-
 func (r *FacultyRepository) ExistsByUserID(userID uint) (bool, error) {
 
 	var exists bool

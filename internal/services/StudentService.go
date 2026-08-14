@@ -148,20 +148,29 @@ func (s *StudentService) GetStudentServiceById(
 }
 
 func (s *StudentService) FetchStudentsByPaymentMonthService(
+	userID uint,
 	month string,
 ) ([]model.Student, error) {
-
-	return s.studentRepo.FetchStudentsByPaymentMonth(month)
+	instID, _ := s.userRepo.GetUserInstitutionID(userID)
+	return s.studentRepo.FetchPaidStudentsByMonth(instID, month)
 }
 
-func (s *StudentService) FetchPaidStudentsService() ([]model.Student, error) {
-
-	return s.studentRepo.FetchPaidStudents()
+func (s *StudentService) FetchStudentsNotPaidByMonthService(
+	userID uint,
+	month string,
+) ([]model.Student, error) {
+	instID, _ := s.userRepo.GetUserInstitutionID(userID)
+	return s.studentRepo.FetchNotPaidStudentsByMonth(instID, month)
 }
 
-func (s *StudentService) FetchNotPaidStudentsService() ([]model.Student, error) {
+func (s *StudentService) FetchPaidStudentsService(userID uint, month string) ([]model.Student, error) {
+	instID, _ := s.userRepo.GetUserInstitutionID(userID)
+	return s.studentRepo.FetchPaidStudentsByMonth(instID, month)
+}
 
-	return s.studentRepo.FetchNotPaidStudents()
+func (s *StudentService) FetchNotPaidStudentsService(userID uint, month string) ([]model.Student, error) {
+	instID, _ := s.userRepo.GetUserInstitutionID(userID)
+	return s.studentRepo.FetchNotPaidStudentsByMonth(instID, month)
 }
 
 func (s *StudentService) GetActiveStudentService() (model.Student, error) {
@@ -199,9 +208,6 @@ func (s *StudentService) UpdateStudentService(
 
 	if dto.Name != "" {
 		student.Name = dto.Name
-	}
-	if dto.Email != "" {
-		student.Email = dto.Email
 	}
 	if dto.Gender != "" {
 		student.Gender = dto.Gender

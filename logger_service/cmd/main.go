@@ -7,8 +7,7 @@ import (
 	"os"
 
 	"backend_institutions/internal/loggerpb"
-	"backend_institutions/logger_service/internals/repository"
-	"backend_institutions/logger_service/internals/services"
+	"backend_institutions/logger_service/internals/wire"
 
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
@@ -21,8 +20,10 @@ func main() {
 		fmt.Println("Cant able to load the envirornment variable")
 	}
 
-	loggerRepo := repository.NewLoggerRepo()
-	loggerService := services.NewLoggerService(loggerRepo)
+	loggerService, err := wire.InitializeLoggerService()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger service: %v", err)
+	}
 
 	grpcServer := grpc.NewServer()
 	loggerpb.RegisterLoggerServiceServer(grpcServer, loggerService)

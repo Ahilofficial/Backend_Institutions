@@ -5,6 +5,7 @@ import (
 	"backend_institutions/internal/model"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -18,41 +19,207 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 	return &UserRepository{db: db}
 }
 
-func (r *UserRepository) HasInstitutionAccess(
-	userID uint,
-	institutionID uint,
-) (bool, error) {
-
+func (r *UserRepository) IsSuperAdmin(userID uint) (bool, error) {
 	var isSuper bool
-	superQuery := `
+	query := `
 		SELECT EXISTS (
 			SELECT 1
 			FROM users u
-			LEFT JOIN user_roles ur ON ur.user_id = u.id
-			LEFT JOIN roles r ON r.id = ur.role_id
-			WHERE u.id = ?
+			JOIN user_roles ur ON ur.user_id = u.id
+			JOIN roles r ON r.id = ur.role_id
+			LEFT JOIN role_permissions rp ON rp.role_id = r.id
+			LEFT JOIN permissions p ON p.id = rp.permission_id
+			WHERE u.id = ? 
 			  AND (
-				LOWER(u.email) = 'ahilcicillin@gmail.com'
-				OR LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin', 'admin')
-				OR LOWER(r.name) LIKE '%super%admin%'
+				LOWER(r.name) = 'super admin'
+				OR LOWER(r.name) = 'super_admin'
+				OR LOWER(r.name) = 'superadmin'
+				OR p.name = 'ADMIN_PERMISSION'
 			  )
 		)
 	`
-	if err := r.db.Raw(superQuery, userID).Scan(&isSuper).Error; err == nil && isSuper {
+	err := r.db.Raw(query, userID).Scan(&isSuper).Error
+	if err != nil {
+		return false, err
+	}
+	return isSuper, nil
+}
+
+func (r *UserRepository) HasAnyRoleAssigned(userID uint) (bool, error) {
+	isSuper, err := r.IsSuperAdmin(userID)
+	if err == nil && isSuper {
+		return true, nil
+	}
+
+	isInstAdmin, err := r.IsInstitutionAdmin(userID)
+	if err == nil && isInstAdmin {
 		return true, nil
 	}
 
 	var count int64
-
-	err := r.db.Model(&model.Institution_Admins{}).
-		Where("user_id = ? AND institution_id = ?", userID, institutionID).
-		Count(&count).Error
-
+	err = r.db.Table("user_roles").Where("user_id = ?", userID).Count(&count).Error
 	if err != nil {
 		return false, err
 	}
 
 	return count > 0, nil
+}
+
+func (r *UserRepository) AssignRoleByName(userID uint, roleName string) error {
+	var roleID uint
+	roleName = strings.TrimSpace(roleName)
+	if roleName == "" {
+		return errors.New("role name is required")
+	}
+
+	err := r.db.Raw("SELECT id FROM roles WHERE LOWER(name) = LOWER(?) AND deleted_at IS NULL LIMIT 1", roleName).Scan(&roleID).Error
+	if err != nil || roleID == 0 {
+		res := r.db.Exec("INSERT INTO roles (name) VALUES (?)", roleName)
+		if res.Error == nil {
+			_ = r.db.Raw("SELECT id FROM roles WHERE LOWER(name) = LOWER(?) AND deleted_at IS NULL LIMIT 1", roleName).Scan(&roleID)
+		}
+	}
+
+	if roleID == 0 {
+		return errors.New("failed to resolve role id for role: " + roleName)
+	}
+
+	return r.db.Exec("INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)", userID, roleID).Error
+}
+
+func (r *UserRepository) GetUserInstitutionID(userID uint) (uint, error) {
+	isSuper, err := r.IsSuperAdmin(userID)
+	if err == nil && isSuper {
+		return 0, nil
+	}
+
+	var instID uint
+	query := `SELECT institution_id FROM institution_admins WHERE user_id = ? LIMIT 1`
+	err = r.db.Raw(query, userID).Scan(&instID).Error
+	if err != nil {
+		return 0, nil
+	}
+	return instID, nil
+}
+
+func (r *UserRepository) CanManageStudentFees(currentUserID uint, studentID uint) (bool, error) {
+	isSuper, err := r.IsSuperAdmin(currentUserID)
+	if err == nil && isSuper {
+		return true, nil
+	}
+
+	var studentInstitutionID uint
+	findInstQuery := `
+		SELECT d.institution_id
+		FROM students s
+		JOIN faculties f ON s.faculty_id = f.id
+		JOIN departments d ON f.department_id = d.id
+		WHERE s.id = ? 
+		  AND s.deleted_at IS NULL
+		  AND f.deleted_at IS NULL
+		  AND d.deleted_at IS NULL
+		LIMIT 1
+	`
+	err = r.db.Raw(findInstQuery, studentID).Scan(&studentInstitutionID).Error
+	if err != nil || studentInstitutionID == 0 {
+		return false, errors.New("student not found or not linked to an institution")
+	}
+
+	var isOwnerAdmin bool
+	adminQuery := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM institution_admins
+			WHERE user_id = ? AND institution_id = ?
+		)
+	`
+	err = r.db.Raw(adminQuery, currentUserID, studentInstitutionID).Scan(&isOwnerAdmin).Error
+	if err != nil {
+		return false, err
+	}
+
+	return isOwnerAdmin, nil
+}
+
+func (r *UserRepository) RequireInstitutionAdminAccess(
+	userID uint,
+	institutionID uint,
+) (bool, error) {
+	isSuper, err := r.IsSuperAdmin(userID)
+	if err == nil && isSuper {
+		return true, nil
+	}
+
+	var hasAccess bool
+	matchQuery := `
+		SELECT EXISTS (
+			SELECT 1 
+			FROM institution_admins 
+			WHERE user_id = ? AND institution_id = ?
+		)
+	`
+	if err := r.db.Raw(matchQuery, userID, institutionID).Scan(&hasAccess).Error; err != nil {
+		return false, err
+	}
+
+	return hasAccess, nil
+}
+
+func (r *UserRepository) HasInstitutionAccess(
+	userID uint,
+	institutionID uint,
+) (bool, error) {
+
+	isSuper, err := r.IsSuperAdmin(userID)
+	if err == nil && isSuper {
+		return true, nil
+	}
+
+	var isInstAdmin bool
+	adminCheckQuery := `
+		SELECT EXISTS (
+			SELECT 1 
+			FROM institution_admins 
+			WHERE user_id = ?
+		)
+	`
+	if err := r.db.Raw(adminCheckQuery, userID).Scan(&isInstAdmin).Error; err != nil {
+		return false, err
+	}
+
+	if !isInstAdmin {
+		return true, nil
+	}
+
+	var hasAccess bool
+	matchQuery := `
+		SELECT EXISTS (
+			SELECT 1 
+			FROM institution_admins 
+			WHERE user_id = ? AND institution_id = ?
+		)
+	`
+	if err := r.db.Raw(matchQuery, userID, institutionID).Scan(&hasAccess).Error; err != nil {
+		return false, err
+	}
+
+	return hasAccess, nil
+}
+
+func (r *UserRepository) IsInstitutionAdmin(userID uint) (bool, error) {
+	var isInstAdmin bool
+	query := `
+		SELECT EXISTS (
+			SELECT 1 
+			FROM institution_admins 
+			WHERE user_id = ?
+		)
+	`
+	err := r.db.Raw(query, userID).Scan(&isInstAdmin).Error
+	if err != nil {
+		return false, err
+	}
+	return isInstAdmin, nil
 }
 
 func (r *UserRepository) FindByVerificationToken(token string) (model.User, error) {
@@ -397,17 +564,11 @@ func (r *UserRepository) HasPermission(
 	query := `
 		SELECT COUNT(*)
 		FROM users u
-		LEFT JOIN user_roles ur ON ur.user_id = u.id
-		LEFT JOIN roles r ON r.id = ur.role_id
-		LEFT JOIN role_permissions rp ON rp.role_id = ur.role_id
-		LEFT JOIN permissions p ON p.id = rp.permission_id
+		JOIN user_roles ur ON ur.user_id = u.id
+		JOIN role_permissions rp ON rp.role_id = ur.role_id
+		JOIN permissions p ON p.id = rp.permission_id
 		WHERE u.id = ?
-		  AND (
-			p.name = ?
-			OR LOWER(u.email) = 'ahilcicillin@gmail.com'
-			OR LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin', 'admin')
-			OR LOWER(r.name) LIKE '%super%admin%'
-		  )
+		  AND p.name = ?
 	`
 
 	err := r.db.Raw(

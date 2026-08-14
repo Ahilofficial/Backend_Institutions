@@ -47,6 +47,7 @@ func (r *FeesRepository) CreateFees(fees *model.Fees) error {
 	}
 
 	fees.ID = uint(id)
+	fees.IsActive = true
 	return nil
 }
 
@@ -148,10 +149,11 @@ func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
 
 	res, err := db.Exec(
 		`INSERT INTO payments
-		(month, amount_paid, fee_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)`,
+		(month, amount_paid, payment_mode, fee_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
 		payment.Month,
 		payment.AmountPaid,
+		payment.PaymentMode,
 		payment.FeeID,
 		now,
 		now,
@@ -166,6 +168,8 @@ func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
 	}
 
 	payment.ID = uint(id)
+	payment.CreatedAt = now
+	payment.UpdatedAt = now
 
 	return nil
 }
@@ -212,16 +216,57 @@ func (r *FeesRepository) UpdateFeesById(fees *model.Fees) error {
 	_, err = db.Exec(`
 		UPDATE fees
 		SET
+			payment_mode = ?,
 			total_paid = ?,
 			pending_amount = ?,
 			updated_at = ?
 		WHERE id = ?
 	`,
+		fees.PaymentMode,
 		fees.TotalPaid,
 		fees.PendingAmount,
 		time.Now(),
 		fees.ID,
 	)
+
+	return err
+}
+
+func (r *FeesRepository) RecalculateFeeTotals(feeID uint, latestPaymentMode string) error {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+
+	var totalPaid float64
+	query := `SELECT COALESCE(SUM(amount_paid), 0) FROM payments WHERE fee_id = ? AND deleted_at IS NULL`
+	if err := db.QueryRow(query, feeID).Scan(&totalPaid); err != nil {
+		return err
+	}
+
+	var totalAmount float64
+	if err := db.QueryRow(`SELECT total_amount FROM fees WHERE id = ?`, feeID).Scan(&totalAmount); err != nil {
+		return err
+	}
+
+	pendingAmount := totalAmount - totalPaid
+	if pendingAmount < 0 {
+		pendingAmount = 0
+	}
+
+	if latestPaymentMode != "" {
+		_, err = db.Exec(`
+			UPDATE fees
+			SET total_paid = ?, pending_amount = ?, payment_mode = ?, updated_at = ?
+			WHERE id = ?
+		`, totalPaid, pendingAmount, latestPaymentMode, time.Now(), feeID)
+	} else {
+		_, err = db.Exec(`
+			UPDATE fees
+			SET total_paid = ?, pending_amount = ?, updated_at = ?
+			WHERE id = ?
+		`, totalPaid, pendingAmount, time.Now(), feeID)
+	}
 
 	return err
 }

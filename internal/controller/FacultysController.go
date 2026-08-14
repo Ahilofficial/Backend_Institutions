@@ -20,11 +20,7 @@ func NewFacultyController(facultyService *services.FacultyService) *FacultyContr
 }
 
 func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
-
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
-		return helper.Error(c, 401, "Invalid user")
-	}
+	userID, _ := c.Locals("user_id").(uint)
 
 	var faculty model.Faculty
 

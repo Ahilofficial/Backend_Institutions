@@ -20,10 +20,7 @@ func NewPrincipalControllers(principalService *services.PrincipalService) *Princ
 }
 
 func (cl *PrincipalControllers) CreatePrincipalController(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
-		return helper.Error(c, 401, "Invalid user")
-	}
+	userID, _ := c.Locals("user_id").(uint)
 
 	var principal model.Principal
 
@@ -35,8 +32,8 @@ func (cl *PrincipalControllers) CreatePrincipalController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "name is required")
 	}
 
-	if principal.DepartmentID == 0 {
-		return helper.Error(c, 400, "department_id is required")
+	if principal.InstitutionID == 0 {
+		return helper.Error(c, 400, "institution_id is required")
 	}
 
 	createdPrincipal, err := cl.principalService.CreatePrincipalService(

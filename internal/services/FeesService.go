@@ -5,6 +5,7 @@ import (
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
 	"errors"
+	"fmt"
 )
 
 type FeesService struct {
@@ -29,7 +30,7 @@ func (s *FeesService) checkInstitutionAccess(
 	userID uint,
 	institutionID uint,
 ) error {
-	hasAccess, err := s.userRepo.HasInstitutionAccess(
+	hasAccess, err := s.userRepo.RequireInstitutionAdminAccess(
 		userID,
 		institutionID,
 	)
@@ -39,7 +40,7 @@ func (s *FeesService) checkInstitutionAccess(
 
 	if !hasAccess {
 		return errors.New(
-			"user does not have access to this institution",
+			"access denied",
 		)
 	}
 
@@ -51,18 +52,16 @@ func (s *FeesService) CreateFeesService(
 	fee *model.Fees,
 ) (model.Fees, error) {
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	if fee.StudentID == 0 {
+		return model.Fees{}, errors.New("student_id is required")
+	}
+
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return model.Fees{}, err
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return model.Fees{}, err
+	if !canManage {
+		return model.Fees{}, errors.New("access denied: cant create fee for this student")
 	}
 
 	if err := s.feesRepo.CreateFees(fee); err != nil {
@@ -99,22 +98,19 @@ func (s *FeesService) GetFeesServiceById(
 	}
 
 	user, err := s.userRepo.FindByID(userID)
-	if err == nil && user.StudentID > 0 && user.StudentID != fee.StudentID {
-		return model.Fees{}, errors.New("access denied")
+	if err == nil && user.StudentID > 0 {
+		if user.StudentID != fee.StudentID {
+			return model.Fees{}, errors.New("access denied: cannot access another student's fee")
+		}
+		return fee, nil
 	}
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return model.Fees{}, err
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return model.Fees{}, err
+	if !canManage {
+		return model.Fees{}, errors.New("access denied: fee does not belong to your institution")
 	}
 
 	return fee, nil
@@ -131,18 +127,12 @@ func (s *FeesService) UpdateFeesService(
 		return err
 	}
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return err
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
+	if !canManage {
+		return errors.New("access denied: fee does not belong to your institution")
 	}
 
 	if dto.Amount != 0 {
@@ -165,18 +155,12 @@ func (s *FeesService) DeleteFeesService(
 		return err
 	}
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return err
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
+	if !canManage {
+		return errors.New("access denied: fee does not belong to your institution")
 	}
 
 	return s.feesRepo.DeleteFees(id)
@@ -196,27 +180,34 @@ func (s *FeesService) CreatePayment(
 		return model.Payment{}, err
 	}
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return model.Payment{}, err
 	}
+	if !canManage {
+		return model.Payment{}, errors.New("access denied: cant process payment for this student")
+	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return model.Payment{}, err
+	if fee.PendingAmount <= 0 {
+		return model.Payment{}, errors.New("fee is already fully paid")
+	}
+
+	if dto.AmountPaid > fee.PendingAmount {
+		return model.Payment{}, fmt.Errorf("amount paid (%.2f) exceeds pending fee amount (%.2f)", dto.AmountPaid, fee.PendingAmount)
 	}
 
 	payment := model.Payment{
-		FeeID:      dto.FeeID,
-		AmountPaid: dto.AmountPaid,
-		Month:      dto.Month,
+		FeeID:       dto.FeeID,
+		AmountPaid:  dto.AmountPaid,
+		PaymentMode: dto.PaymentMode,
+		Month:       dto.Month,
 	}
 
 	if err := s.feesRepo.CreatePayment(&payment); err != nil {
+		return model.Payment{}, err
+	}
+
+	if err := s.feesRepo.RecalculateFeeTotals(dto.FeeID, dto.PaymentMode); err != nil {
 		return model.Payment{}, err
 	}
 
@@ -238,18 +229,12 @@ func (s *FeesService) GetPaymentByID(
 		return model.Payment{}, err
 	}
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return model.Payment{}, err
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return model.Payment{}, err
+	if !canManage {
+		return model.Payment{}, errors.New("access denied: payment does not belong to your institution")
 	}
 
 	return payment, nil
@@ -265,18 +250,12 @@ func (s *FeesService) GetPaymentByFeeID(
 		return nil, err
 	}
 
-	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
-		fee.StudentID,
-	)
+	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return nil, err
+	if !canManage {
+		return nil, errors.New("access denied: fee does not belong to your institution")
 	}
 
 	return s.feesRepo.FetchPaymentByFeeID(feeID)

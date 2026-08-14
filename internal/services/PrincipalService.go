@@ -42,16 +42,13 @@ func (s *PrincipalService) checkInstitutionAccess(
 }
 
 func (s *PrincipalService) CreatePrincipalService(userID uint, principal *model.Principal) (model.Principal, error) {
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		principal.DepartmentID,
-	)
-	if err != nil {
-		return model.Principal{}, err
+	if principal.InstitutionID == 0 {
+		return model.Principal{}, errors.New("institution_id is required")
 	}
 
 	if err := s.checkInstitutionAccess(
 		userID,
-		institutionID,
+		principal.InstitutionID,
 	); err != nil {
 		return model.Principal{}, err
 	}
@@ -115,16 +112,9 @@ func (s *PrincipalService) GetPrincipalServiceById(userID uint, id uint) (*model
 		return nil, err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		principal.DepartmentID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := s.checkInstitutionAccess(
 		userID,
-		institutionID,
+		principal.InstitutionID,
 	); err != nil {
 		return nil, err
 	}
@@ -145,16 +135,9 @@ func (s *PrincipalService) DeletePrincipalService(
 		return err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		principal.DepartmentID,
-	)
-	if err != nil {
-		return err
-	}
-
 	if err := s.checkInstitutionAccess(
 		userID,
-		institutionID,
+		principal.InstitutionID,
 	); err != nil {
 		return err
 	}
@@ -181,16 +164,9 @@ func (s *PrincipalService) UpdatePrincipalService(
 		return err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		principal.DepartmentID,
-	)
-	if err != nil {
-		return err
-	}
-
 	if err := s.checkInstitutionAccess(
 		userID,
-		institutionID,
+		principal.InstitutionID,
 	); err != nil {
 		return err
 	}

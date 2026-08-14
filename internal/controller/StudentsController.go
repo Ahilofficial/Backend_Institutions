@@ -7,6 +7,7 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -20,11 +21,7 @@ func NewStudentController(studentService *services.StudentService) *StudentContr
 }
 
 func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
-
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
-		return helper.Error(c, 401, "Invalid user")
-	}
+	userID, _ := c.Locals("user_id").(uint)
 
 	var student model.Student
 
@@ -34,10 +31,6 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 
 	if student.Name == "" {
 		return helper.Error(c, 400, "name is required")
-	}
-
-	if student.Email == "" {
-		return helper.Error(c, 400, "email is required")
 	}
 
 	if student.FacultyID == 0 {
@@ -264,16 +257,33 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 }
 
 func (c *StudentController) FetchStudentsByPaymentMonth(ctx fiber.Ctx) error {
-	month := ctx.Query("month")
+	userID, _ := ctx.Locals("user_id").(uint)
+	month := strings.TrimSpace(ctx.Query("month"))
 
 	if month == "" {
-		return helper.Error(ctx, fiber.StatusBadRequest, "month is required")
+		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
 	}
 
-	students, err := c.studentService.FetchStudentsByPaymentMonthService(month)
+	students, err := c.studentService.FetchStudentsByPaymentMonthService(userID, month)
 	if err != nil {
 		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
 	}
 
-	return helper.Success(ctx, "Students fetched successfully", students)
+	return helper.Success(ctx, "Paid students for month fetched successfully", dto.ToStudentResponseListDTO(students))
+}
+
+func (c *StudentController) FetchStudentsNotPaidByMonth(ctx fiber.Ctx) error {
+	userID, _ := ctx.Locals("user_id").(uint)
+	month := strings.TrimSpace(ctx.Query("month"))
+
+	if month == "" {
+		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
+	}
+
+	students, err := c.studentService.FetchStudentsNotPaidByMonthService(userID, month)
+	if err != nil {
+		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
+	}
+
+	return helper.Success(ctx, "Not paid students for month fetched successfully", dto.ToStudentResponseListDTO(students))
 }

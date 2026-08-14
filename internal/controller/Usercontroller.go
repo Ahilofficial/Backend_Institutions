@@ -38,6 +38,8 @@ func (cl *UserController) SignUpController(c fiber.Ctx) error {
 	return helper.Success(c, "Signed up successfully", dto.ToUserResponseDTO(&user))
 }
 
+
+
 func (cl *UserController) SignInController(c fiber.Ctx) error {
 	var body dto.SignInDTO
 	body.Sanitize()

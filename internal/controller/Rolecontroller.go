@@ -229,7 +229,6 @@ func (cl *RoleController) DeletePermissionController(c fiber.Ctx) error {
 	return helper.Success(c, "Permission deleted successfully", nil)
 }
 
-// UserRole controllers
 func (cl *RoleController) FetchUserRolesController(c fiber.Ctx) error {
 	page, err := strconv.Atoi(c.Query("page"))
 	if err != nil || page < 1 {
@@ -332,7 +331,6 @@ func (cl *RoleController) DeleteUserRoleController(c fiber.Ctx) error {
 	return helper.Success(c, "User role mapping deleted successfully", nil)
 }
 
-// RolePermission controllers
 func (cl *RoleController) FetchRolePermissionsController(c fiber.Ctx) error {
 	page, err := strconv.Atoi(c.Query("page"))
 	if err != nil || page < 1 {

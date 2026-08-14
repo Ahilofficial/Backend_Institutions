@@ -9,7 +9,6 @@ import (
 
 type CreateStudentDTO struct {
 	Name      string `json:"name"`
-	Email     string `json:"email"`
 	Gender    string `json:"gender"`
 	FacultyID uint   `json:"faculty_id"`
 	UserID    uint   `json:"user_id"`
@@ -17,7 +16,6 @@ type CreateStudentDTO struct {
 
 func (dto *CreateStudentDTO) Sanitize() {
 	dto.Name = strings.TrimSpace(dto.Name)
-	dto.Email = strings.TrimSpace(strings.ToLower(dto.Email))
 	dto.Gender = strings.TrimSpace(strings.ToLower(dto.Gender))
 }
 
@@ -25,12 +23,6 @@ func (dto *CreateStudentDTO) Validate() error {
 
 	if dto.Name == "" {
 		return errors.New("name is required")
-	}
-	if dto.Email == "" {
-		return errors.New("email is required")
-	}
-	if !emailRegex.MatchString(dto.Email) {
-		return errors.New("invalid email format")
 	}
 	if dto.Gender == "" {
 		return errors.New("gender is required")
@@ -43,7 +35,6 @@ func (dto *CreateStudentDTO) Validate() error {
 
 type UpdateStudentDTO struct {
 	Name   string `json:"name"`
-	Email  string `json:"email"`
 	Gender string `json:"gender"`
 }
 
@@ -53,12 +44,6 @@ func (dto *UpdateStudentDTO) Validate() error {
 	if dto.Name == "" {
 		return errors.New("name is required")
 	}
-	if dto.Email == "" {
-		return errors.New("email is required")
-	}
-	if !emailRegex.MatchString(dto.Email) {
-		return errors.New("invalid email format")
-	}
 	if dto.Gender == "" {
 		return errors.New("gender is required")
 	}
@@ -67,18 +52,24 @@ func (dto *UpdateStudentDTO) Validate() error {
 
 func (dto *UpdateStudentDTO) Sanitize() {
 	dto.Name = strings.TrimSpace(dto.Name)
-	dto.Email = strings.TrimSpace(strings.ToLower(dto.Email))
 	dto.Gender = strings.TrimSpace(strings.ToLower(dto.Gender))
 }
 
+type StudentFacultyDTO struct {
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	Gender       string `json:"gender"`
+	DepartmentID uint   `json:"department_id"`
+}
+
 type StudentResponseDTO struct {
-	ID        uint              `json:"id"`
-	Name      string            `json:"name"`
-	Email     string            `json:"email"`
-	Gender    string            `json:"gender"`
-	FacultyID uint              `json:"faculty_id"`
-	IsActive  bool              `json:"isactive"`
-	Fees      []FeesResponseDTO `json:"fees"`
+	ID        uint               `json:"id"`
+	Name      string             `json:"name"`
+	Gender    string             `json:"gender"`
+	FacultyID uint               `json:"faculty_id"`
+	IsActive  bool               `json:"is_active"`
+	Faculty   *StudentFacultyDTO `json:"faculty,omitempty"`
+	Fees      []FeesResponseDTO  `json:"fees,omitempty"`
 }
 
 func ToStudentResponseDTO(stud *model.Student) StudentResponseDTO {

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -81,6 +82,19 @@ func (s *UserService) SignUp(dto *dto.SignUpDTO) (model.User, error) {
 	return user, nil
 }
 
+func (s *UserService) SignUpWithRole(dto *dto.SignUpDTO, roleName string) (model.User, error) {
+	user, err := s.SignUp(dto)
+	if err != nil {
+		return model.User{}, err
+	}
+
+	if strings.TrimSpace(roleName) != "" {
+		_ = s.userrepo.AssignRoleByName(user.ID, roleName)
+	}
+
+	return user, nil
+}
+
 func (s *UserService) SendVerificationEmail(userID uint) error {
 	user, err := s.userrepo.FindByID(userID)
 	if err != nil {
@@ -136,6 +150,15 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 	err = utils.ComparePassword(user.Password, dto.Password)
 	if err != nil {
 		return "", "", 0, "", errors.New("invalid email or password")
+	}
+
+	hasRole, err := s.userrepo.HasAnyRoleAssigned(user.ID)
+	if err != nil {
+		return "", "", 0, "", err
+	}
+
+	if !hasRole {
+		return "", "", 0, "", errors.New("role not assigned yet by super admin, please wait for role assignment")
 	}
 
 	go func(email, name string) {

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"backend_institutions/internal/model"
@@ -36,27 +37,19 @@ func (r *StudentRepository) CreateStudent(
 
 	res, err := db.Exec(
 		`INSERT INTO students
-			(name, email, gender, faculty_id, user_id, created_at, updated_at, is_active)
-		SELECT ?, ?, ?, id, ?, ?, ?, ?
+			(name, gender, faculty_id, user_id, created_at, updated_at, is_active)
+		SELECT ?, ?, id, ?, ?, ?, ?
 		FROM faculties
 		WHERE id = ?
 		  AND deleted_at IS NULL
-		  AND is_active = true
-		  AND NOT EXISTS (
-			  SELECT 1
-			  FROM students
-			  WHERE email = ?
-			    AND deleted_at IS NULL
-		  )`,
+		  AND is_active = true`,
 		student.Name,
-		student.Email,
 		student.Gender,
 		student.UserID,
 		now,
 		now,
 		true,
 		student.FacultyID,
-		student.Email,
 	)
 
 	if err != nil {
@@ -70,7 +63,7 @@ func (r *StudentRepository) CreateStudent(
 
 	if rows == 0 {
 		return errors.New(
-			"student email already registered, or assigned faculty is inactive/invalid",
+			"assigned faculty is inactive or invalid",
 		)
 	}
 
@@ -340,13 +333,11 @@ func (r *StudentRepository) UpdateStudentById(
 	_, err = db.Exec(
 		`UPDATE students
 		 SET name = ?,
-		     email = ?,
 		     gender = ?,
 		     updated_at = ?
 		 WHERE id = ?
 		   AND deleted_at IS NULL`,
 		student.Name,
-		student.Email,
 		student.Gender,
 		time.Now(),
 		student.ID,
@@ -391,16 +382,28 @@ func (r *StudentRepository) FetchStudentsByPaymentMonth(
 // --------------------------------------------------
 
 func (r *StudentRepository) FetchPaidStudents() ([]model.Student, error) {
+	return r.FetchPaidStudentsByMonth(0, "")
+}
 
+func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, month string) ([]model.Student, error) {
 	var students []model.Student
 
-	err := r.db.
-		Model(&model.Student{}).
+	dbQuery := r.db.Model(&model.Student{}).
+		Joins("JOIN faculties f ON f.id = students.faculty_id").
+		Joins("JOIN departments d ON d.id = f.department_id").
 		Joins("JOIN fees ON fees.student_id = students.id").
-		Where(`
-			students.deleted_at IS NULL
-			AND fees.total_amount = fees.total_paid
-		`).
+		Joins("JOIN payments ON payments.fee_id = fees.id").
+		Where("students.deleted_at IS NULL AND payments.deleted_at IS NULL AND payments.amount_paid > 0")
+
+	if strings.TrimSpace(month) != "" {
+		dbQuery = dbQuery.Where("LOWER(payments.month) = LOWER(?)", strings.TrimSpace(month))
+	}
+
+	if instID > 0 {
+		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
+	}
+
+	err := dbQuery.
 		Preload("Faculty").
 		Preload("Fees").
 		Preload("Fees.Payments").
@@ -414,21 +417,31 @@ func (r *StudentRepository) FetchPaidStudents() ([]model.Student, error) {
 	return students, nil
 }
 
-// --------------------------------------------------
-// Not Paid Students
-// --------------------------------------------------
-
 func (r *StudentRepository) FetchNotPaidStudents() ([]model.Student, error) {
+	return r.FetchNotPaidStudentsByMonth(0, "")
+}
 
+func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, month string) ([]model.Student, error) {
 	var students []model.Student
 
-	err := r.db.
-		Model(&model.Student{}).
-		Joins("JOIN fees ON fees.student_id = students.id").
-		Where(`
-			students.deleted_at IS NULL
-			AND fees.total_amount <> fees.total_paid
-		`).
+	m := strings.TrimSpace(month)
+
+	dbQuery := r.db.Model(&model.Student{}).
+		Joins("JOIN faculties f ON f.id = students.faculty_id").
+		Joins("JOIN departments d ON d.id = f.department_id").
+		Where("students.deleted_at IS NULL")
+
+	if m != "" {
+		dbQuery = dbQuery.Where("students.id NOT IN (SELECT f.student_id FROM fees f JOIN payments p ON p.fee_id = f.id WHERE LOWER(p.month) = LOWER(?) AND p.deleted_at IS NULL AND p.amount_paid > 0)", m)
+	} else {
+		dbQuery = dbQuery.Where("students.id NOT IN (SELECT student_id FROM fees WHERE total_amount = total_paid)")
+	}
+
+	if instID > 0 {
+		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
+	}
+
+	err := dbQuery.
 		Preload("Faculty").
 		Preload("Fees").
 		Preload("Fees.Payments").

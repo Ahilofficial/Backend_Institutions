@@ -10,11 +10,11 @@ import (
 )
 
 type CreatePrincipalDTO struct {
-	Name         string    `json:"name"`
-	Gender       string    `json:"gender"`
-	JoiningDate  time.Time `json:"joining_date"`
-	DepartmentID uint      `json:"department_id"`
-	UserID       uint      `json:"user_id"`
+	Name          string    `json:"name"`
+	Gender        string    `json:"gender"`
+	JoiningDate   time.Time `json:"joining_date"`
+	InstitutionID uint      `json:"institution_id"`
+	UserID        uint      `json:"user_id"`
 }
 
 func (dto *CreatePrincipalDTO) Sanitize() {
@@ -32,8 +32,8 @@ func (dto *CreatePrincipalDTO) Validate() error {
 	if dto.JoiningDate.IsZero() {
 		return errors.New("joining date is required")
 	}
-	if dto.DepartmentID == 0 {
-		return errors.New("department id is required")
+	if dto.InstitutionID == 0 {
+		return errors.New("institution id is required")
 	}
 	return nil
 }
@@ -59,12 +59,12 @@ func (dto *UpdatePrincipalDTO) Validate() error {
 }
 
 type PrincipalResponseDTO struct {
-	ID           uint      `json:"id"`
-	Name         string    `json:"name"`
-	Gender       string    `json:"gender"`
-	JoiningDate  time.Time `json:"joining_date"`
-	DepartmentID uint      `json:"department_id"`
-	IsActive     bool      `json:"isactive"`
+	ID            uint      `json:"id"`
+	Name          string    `json:"name"`
+	Gender        string    `json:"gender"`
+	JoiningDate   time.Time `json:"joining_date"`
+	InstitutionID uint      `json:"institution_id"`
+	IsActive      bool      `json:"is_active"`
 }
 
 func ToPrincipalResponseDTO(pr *model.Principal) PrincipalResponseDTO {

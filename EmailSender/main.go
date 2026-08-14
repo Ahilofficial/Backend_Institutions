@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net"
-
 	"os"
 
 	"backend_institutions/EmailSender/notificationpb"
-	"backend_institutions/EmailSender/repository"
-	"backend_institutions/EmailSender/service"
+	"backend_institutions/EmailSender/wire"
 
 	"github.com/joho/godotenv"
 	"google.golang.org/grpc"
@@ -21,9 +19,10 @@ func main() {
 		fmt.Println("Cant able to load the envirornment variable")
 	}
 
-	emailRepo := repository.NewEmailRepository()
-
-	notificationService := service.NewNotificationService(emailRepo)
+	notificationService, err := wire.InitializeNotificationService()
+	if err != nil {
+		log.Fatalf("Failed to initialize notification service: %v", err)
+	}
 
 	grpcServer := grpc.NewServer()
 

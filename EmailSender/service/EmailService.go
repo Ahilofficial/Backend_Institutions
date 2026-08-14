@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	// "fmt"
 
 	"backend_institutions/EmailSender/notificationpb"
 	"backend_institutions/EmailSender/repository"
