@@ -27,10 +27,10 @@ func (s *MenuService) GetMenus(userID uint) ([]dto.MenuResponse, error) {
 
 	for _, menu := range menus {
 		response = append(response, dto.MenuResponse{
-			ID:   menu.ID,
-			Name: menu.Name,
-			// Route: menu.Route,
-			Icon: menu.Icon,
+			ID:    menu.ID,
+			Name:  menu.Name,
+			Route: menu.Route,
+			Icon:  menu.Icon,
 		})
 	}
 

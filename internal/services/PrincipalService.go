@@ -57,17 +57,9 @@ func (s *PrincipalService) CreatePrincipalService(userID uint, principal *model.
 		return model.Principal{}, err
 	}
 
-	exists, err := s.principalRepo.ExistsByUserID(
-		principal.UserID,
-	)
-	if err != nil {
-		return model.Principal{}, err
-	}
-
-	if exists {
-		return model.Principal{}, errors.New(
-			"user is already a principal",
-		)
+	existingType, err := s.userRepo.CheckUserExistingProfile(principal.UserID)
+	if err == nil && existingType != "" {
+		return model.Principal{}, errors.New("user is already registered as a " + existingType)
 	}
 
 	if err := s.principalRepo.CreatePrincipal(principal); err != nil {

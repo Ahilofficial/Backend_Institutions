@@ -36,6 +36,8 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "department_id is required")
 	}
 
+	faculty.UserID = userID
+
 	createdFaculty, err := cl.facultyService.CreateFacultyService(
 		userID,
 		&faculty,
@@ -126,6 +128,36 @@ func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 		c,
 		"Faculty fetched successfully",
 		dto.ToFacultyResponseDTO(faculty),
+	)
+}
+
+func (cl *FacultyController) GetLoggedInFacultyController(c fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(uint)
+
+	faculty, err := cl.facultyService.GetLoggedInFacultyProfile(userID)
+	if err != nil {
+		return helper.Error(c, 404, err.Error())
+	}
+
+	return helper.Success(
+		c,
+		"LoggedIn faculty profile fetched successfully",
+		dto.ToFacultyResponseDTO(faculty),
+	)
+}
+
+func (cl *FacultyController) GetLoggedInFacultyStudentsController(c fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(uint)
+
+	students, err := cl.facultyService.GetLoggedInFacultyStudents(userID)
+	if err != nil {
+		return helper.Error(c, 404, err.Error())
+	}
+
+	return helper.Success(
+		c,
+		"LoggedIn faculty students fetched successfully",
+		dto.ToStudentResponseListDTO(students),
 	)
 }
 

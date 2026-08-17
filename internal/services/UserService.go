@@ -132,33 +132,39 @@ func (s *UserService) SendVerificationEmail(userID uint) error {
 	return nil
 }
 
-func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, uint, string, error) {
+func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, uint, string, string, error) {
 	user, err := s.userrepo.FindByEmail(dto.Email)
 
 	if err != nil {
-		return "", "", 0, "", errors.New("invalid email or password")
+		return "", "", 0, "", "", errors.New("invalid email or password")
 	}
 
 	if !user.IsActive {
-		return "", "", 0, "", errors.New("account is inactive")
+		return "", "", 0, "", "", errors.New("account is inactive")
 	}
 
 	if !user.IsVerified {
-		return "", "", 0, "", errors.New("please verify your email before signing in")
+		return "", "", 0, "", "", errors.New("please verify your email before signing in")
 	}
 
 	err = utils.ComparePassword(user.Password, dto.Password)
 	if err != nil {
-		return "", "", 0, "", errors.New("invalid email or password")
+		return "", "", 0, "", "", errors.New("invalid email or password")
 	}
 
 	hasRole, err := s.userrepo.HasAnyRoleAssigned(user.ID)
 	if err != nil {
-		return "", "", 0, "", err
+		return "", "", 0, "", "", err
 	}
 
 	if !hasRole {
-		return "", "", 0, "", errors.New("role not assigned yet by super admin, please wait for role assignment")
+		return "", "", 0, "", "", errors.New("role not assigned yet by super admin, please wait for role assignment")
+	}
+
+	rolesList, _ := s.userrepo.FetchUserRoles(user.ID)
+	primaryRole := ""
+	if len(rolesList) > 0 {
+		primaryRole = rolesList[0].Name
 	}
 
 	go func(email, name string) {
@@ -178,18 +184,18 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 
 	accessToken, err := utils.GenerateAccessToken(user.ID, sessionID)
 	if err != nil {
-		return "", "", 0, "", err
+		return "", "", 0, "", "", err
 	}
 	refreshToken, err := utils.GenerateRefreshToken(user.ID, sessionID)
 	if err != nil {
-		return "", "", 0, "", err
+		return "", "", 0, "", "", err
 	}
 	_, err = s.sessionService.CreateSession(user.ID, userAgent, sessionID, accessToken, refreshToken)
 	if err != nil {
-		return "", "", 0, "", err
+		return "", "", 0, "", "", err
 	}
 
-	return accessToken, refreshToken, user.ID, sessionID, nil
+	return accessToken, refreshToken, user.ID, sessionID, primaryRole, nil
 }
 
 func (s *UserService) AssignRole(userID uint, roleName string) error {

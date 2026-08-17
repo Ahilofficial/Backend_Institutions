@@ -89,24 +89,25 @@ func RegisterRoutes(
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 	}))
-	
+
+	app.Post("/signup/:role", userController.SignUpController)
+	app.Post("/signup", userController.SignUpController)
+	app.Post("/signin", userController.SignInController)
+	app.Post("/logout", userController.Logout)
+	app.Post("/resendmail", userController.ResendMail)
+
+   
+
 	app.Get("/auth/verify", userController.VerifyEmail)
 	app.Post("/auth/forgot-password", userController.ForgotPassword)
 	app.Post("/auth/reset-password", userController.ResetPassword)
 	app.Get("/roles", roleController.FetchRoles)
 	app.Get("/permission", roleController.FetchPermissions)
+
 	
-	app.Post("/signup", userController.SignUpController)
-	app.Post("/signin", userController.SignInController)
-	app.Post("/logout", userController.Logout)
-	app.Post("/resendmail", userController.ResendMail)
+
 	app.Get("/menus", middleware.AuthRequired(), menuController.GetMenus)
-	
-
-app.Use(middleware.RequestResponseLogger())
-
-
-
+	app.Use(middleware.RequestResponseLogger())
 
 	protected := app.Group("", middleware.AuthRequired())
 
@@ -189,6 +190,8 @@ app.Use(middleware.RequestResponseLogger())
 	FacultyRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFaculties), facultyController.CreateFacultyController)
 	
 	FacultyRoute.Get("", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.GetAllFacultiesController)
+	FacultyRoute.Get("/loginfaculty", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.GetLoggedInFacultyController)
+	FacultyRoute.Get("/loginfaculty/students", middleware.RequirePermission(constants.PermissionViewStudents), facultyController.GetLoggedInFacultyStudentsController)
 	FacultyRoute.Get("/all", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.FetchAllFacultiesController)
 	FacultyRoute.Get("/active", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.GetActiveFacultyController)
 	FacultyRoute.Get("/inactive", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.GetInactiveFacultyController)
@@ -205,11 +208,14 @@ app.Use(middleware.RequestResponseLogger())
 	StudentRoute.Post("", middleware.RequirePermission(constants.PermissionCreateStudents), studentController.CreateStudentControllers)
 	
 	StudentRoute.Get("", middleware.RequirePermission(constants.PermissionViewStudents), studentController.FetchAllStudentsPaginatedControllers)
+	StudentRoute.Get("/loginstudents", middleware.RequirePermission(constants.PermissionViewStudents), studentController.GetLoggedInStudentController)
 	StudentRoute.Get("/all", middleware.RequirePermission(constants.PermissionViewStudents), studentController.FetchAllStudentsControllers)
 	StudentRoute.Get("/active", middleware.RequirePermission(constants.PermissionViewStudents), studentController.GetActiveStudentController)
 	StudentRoute.Get("/inactive", middleware.RequirePermission(constants.PermissionViewStudents), studentController.GetInactiveStudentController)
 	StudentRoute.Get("/payment-month", middleware.RequirePermission(constants.StudentMonth), studentController.FetchStudentsByPaymentMonth)
 	StudentRoute.Get("/not-paid-month", middleware.RequirePermission(constants.StudentMonth), studentController.FetchStudentsNotPaidByMonth)
+	StudentRoute.Get("/faculty/paid", middleware.RequirePermission(constants.StudentMonth), studentController.FetchFacultyPaidStudents)
+	StudentRoute.Get("/faculty/not-paid", middleware.RequirePermission(constants.StudentMonth), studentController.FetchFacultyUnpaidStudents)
 	StudentRoute.Get("/paid", middleware.RequirePermission(constants.StudentMonth), studentController.FetchPaidStudents)
 	StudentRoute.Get("/not-paid", middleware.RequirePermission(constants.StudentMonth), studentController.FetchNotPaidStudents)
 	StudentRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewStudentsID), studentController.GetStudentByIDControllers)

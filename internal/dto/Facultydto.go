@@ -13,7 +13,6 @@ type CreateFacultyDTO struct {
 	Gender       string    `json:"gender"`
 	JoiningDate  time.Time `json:"joining_date"`
 	DepartmentID uint      `json:"department_id"`
-	UserID       uint      `json:"user_id"`
 }
 
 func (dto *CreateFacultyDTO) Sanitize() {

@@ -37,8 +37,8 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 		  AND NOT EXISTS (
 			  SELECT 1
 			  FROM faculties
-			  WHERE name = ?
-			    AND department_id = ?
+			  WHERE user_id = ?
+			    AND user_id > 0
 			    AND deleted_at IS NULL
 		  )`,
 		faculty.Name,
@@ -49,8 +49,7 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 		now,
 		true,
 		faculty.DepartmentID,
-		faculty.Name,
-		faculty.DepartmentID,
+		faculty.UserID,
 	)
 	if err != nil {
 		return err
@@ -62,7 +61,7 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 	}
 
 	if rows == 0 {
-		return errors.New("faculty name already exists in this department, or parent department is inactive/invalid")
+		return errors.New("faculty profile already exists for this user, or parent department is inactive/invalid")
 	}
 
 	id, err := res.LastInsertId()
@@ -74,6 +73,10 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 	faculty.CreatedAt = now
 	faculty.UpdatedAt = now
 	faculty.IsActive = true
+
+	if faculty.UserID != 0 {
+		db.Exec("UPDATE users SET faculty_id = ? WHERE id = ?", faculty.ID, faculty.UserID)
+	}
 
 	return nil
 }
@@ -139,6 +142,19 @@ func (r *FacultyRepository) FetchFacultyById(id uint) (model.Faculty, error) {
 	}
 
 	return fac, nil
+}
+
+func (r *FacultyRepository) FetchStudentsByFacultyID(facultyID uint) ([]model.Student, error) {
+	var students []model.Student
+	err := r.db.
+		Preload("Fees").
+		Preload("Fees.Payments").
+		Where("faculty_id = ? AND deleted_at IS NULL", facultyID).
+		Find(&students).Error
+	if err != nil {
+		return nil, err
+	}
+	return students, nil
 }
 
 func (r *FacultyRepository) FetchFacultyDeleted() ([]model.Faculty, error) {
@@ -226,6 +242,12 @@ func (r *FacultyRepository) GetInstitutionByFacultyID(facultyID uint) (uint, err
 	}
 
 	return institutionID, nil
+}
+
+func (r *FacultyRepository) FetchByUserID(userID uint) (model.Faculty, error) {
+	var fac model.Faculty
+	err := r.db.Raw("SELECT * FROM faculties WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&fac).Error
+	return fac, err
 }
 
 func (r *FacultyRepository) ExistsByUserID(userID uint) (bool, error) {

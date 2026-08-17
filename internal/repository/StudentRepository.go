@@ -20,9 +20,7 @@ func NewStudentRepository(db *gorm.DB) *StudentRepository {
 	}
 }
 
-// --------------------------------------------------
-// Create Student
-// --------------------------------------------------
+
 
 func (r *StudentRepository) CreateStudent(
 	student *model.Student,
@@ -42,7 +40,14 @@ func (r *StudentRepository) CreateStudent(
 		FROM faculties
 		WHERE id = ?
 		  AND deleted_at IS NULL
-		  AND is_active = true`,
+		  AND is_active = true
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM students
+			  WHERE user_id = ?
+			    AND user_id > 0
+			    AND deleted_at IS NULL
+		  )`,
 		student.Name,
 		student.Gender,
 		student.UserID,
@@ -50,6 +55,7 @@ func (r *StudentRepository) CreateStudent(
 		now,
 		true,
 		student.FacultyID,
+		student.UserID,
 	)
 
 	if err != nil {
@@ -63,7 +69,7 @@ func (r *StudentRepository) CreateStudent(
 
 	if rows == 0 {
 		return errors.New(
-			"assigned faculty is inactive or invalid",
+			"student profile already exists for this user, or assigned faculty is inactive/invalid",
 		)
 	}
 
@@ -77,12 +83,20 @@ func (r *StudentRepository) CreateStudent(
 	student.UpdatedAt = now
 	student.IsActive = true
 
+	if student.UserID != 0 {
+		db.Exec("UPDATE users SET student_id = ? WHERE id = ?", student.ID, student.UserID)
+	}
+
 	return nil
 }
 
-// --------------------------------------------------
-// Check Student By User ID
-// --------------------------------------------------
+
+
+func (r *StudentRepository) FetchByUserID(userID uint) (model.Student, error) {
+	var stud model.Student
+	err := r.db.Raw("SELECT * FROM students WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&stud).Error
+	return stud, err
+}
 
 func (r *StudentRepository) ExistsByUserID(
 	userID uint,
@@ -106,9 +120,7 @@ func (r *StudentRepository) ExistsByUserID(
 	return exists, nil
 }
 
-// --------------------------------------------------
-// Get All Students
-// --------------------------------------------------
+
 
 func (r *StudentRepository) FetchStudent() ([]model.Student, error) {
 
@@ -128,9 +140,7 @@ func (r *StudentRepository) FetchStudent() ([]model.Student, error) {
 	return students, nil
 }
 
-// --------------------------------------------------
-// Get Paginated Students
-// --------------------------------------------------
+
 
 func (r *StudentRepository) FetchStudentPaginated(
 	search string,
@@ -185,9 +195,7 @@ func (r *StudentRepository) FetchStudentPaginated(
 	return students, total, nil
 }
 
-// --------------------------------------------------
-// Get Student By ID
-// --------------------------------------------------
+
 
 func (r *StudentRepository) FetchStudentById(
 	id uint,
@@ -209,9 +217,7 @@ func (r *StudentRepository) FetchStudentById(
 	return student, nil
 }
 
-// --------------------------------------------------
-// Get Deleted Students
-// --------------------------------------------------
+
 
 func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
 
@@ -229,9 +235,7 @@ func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
 	return students, nil
 }
 
-// --------------------------------------------------
-// Get Active Student
-// --------------------------------------------------
+
 
 func (r *StudentRepository) GetActiveStudent() (model.Student, error) {
 
@@ -251,9 +255,7 @@ func (r *StudentRepository) GetActiveStudent() (model.Student, error) {
 	return student, nil
 }
 
-// --------------------------------------------------
-// Get Inactive Student
-// --------------------------------------------------
+
 
 func (r *StudentRepository) GetInactiveStudent() (model.Student, error) {
 
@@ -273,9 +275,7 @@ func (r *StudentRepository) GetInactiveStudent() (model.Student, error) {
 	return student, nil
 }
 
-// --------------------------------------------------
-// Delete Student
-// --------------------------------------------------
+
 
 func (r *StudentRepository) DeleteStudent(id uint) error {
 
@@ -317,9 +317,7 @@ func (r *StudentRepository) DeleteStudent(id uint) error {
 	return nil
 }
 
-// --------------------------------------------------
-// Update Student
-// --------------------------------------------------
+
 
 func (r *StudentRepository) UpdateStudentById(
 	student *model.Student,
@@ -346,9 +344,7 @@ func (r *StudentRepository) UpdateStudentById(
 	return err
 }
 
-// --------------------------------------------------
-// Students By Payment Month
-// --------------------------------------------------
+
 
 func (r *StudentRepository) FetchStudentsByPaymentMonth(
 	month string,
@@ -377,15 +373,12 @@ func (r *StudentRepository) FetchStudentsByPaymentMonth(
 	return students, nil
 }
 
-// --------------------------------------------------
-// Paid Students
-// --------------------------------------------------
 
 func (r *StudentRepository) FetchPaidStudents() ([]model.Student, error) {
-	return r.FetchPaidStudentsByMonth(0, "")
+	return r.FetchPaidStudentsByMonth(0, 0, "")
 }
 
-func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, month string) ([]model.Student, error) {
+func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, facultyID uint, month string) ([]model.Student, error) {
 	var students []model.Student
 
 	dbQuery := r.db.Model(&model.Student{}).
@@ -399,7 +392,9 @@ func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, month string) 
 		dbQuery = dbQuery.Where("LOWER(payments.month) = LOWER(?)", strings.TrimSpace(month))
 	}
 
-	if instID > 0 {
+	if facultyID > 0 {
+		dbQuery = dbQuery.Where("students.faculty_id = ?", facultyID)
+	} else if instID > 0 {
 		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
 	}
 
@@ -418,10 +413,10 @@ func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, month string) 
 }
 
 func (r *StudentRepository) FetchNotPaidStudents() ([]model.Student, error) {
-	return r.FetchNotPaidStudentsByMonth(0, "")
+	return r.FetchNotPaidStudentsByMonth(0, 0, "")
 }
 
-func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, month string) ([]model.Student, error) {
+func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, facultyID uint, month string) ([]model.Student, error) {
 	var students []model.Student
 
 	m := strings.TrimSpace(month)
@@ -437,7 +432,9 @@ func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, month strin
 		dbQuery = dbQuery.Where("students.id NOT IN (SELECT student_id FROM fees WHERE total_amount = total_paid)")
 	}
 
-	if instID > 0 {
+	if facultyID > 0 {
+		dbQuery = dbQuery.Where("students.faculty_id = ?", facultyID)
+	} else if instID > 0 {
 		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
 	}
 
@@ -455,9 +452,6 @@ func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, month strin
 	return students, nil
 }
 
-// --------------------------------------------------
-// Get Institution ID By Student
-// --------------------------------------------------
 
 func (r *StudentRepository) GetInstitutionIDByStudent(
 	studentID uint,

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"backend_institutions/internal/constants"
 	"backend_institutions/internal/database"
 	"backend_institutions/internal/helper"
 
@@ -17,6 +18,12 @@ func RequirePermission(permission string) fiber.Handler {
 				401,
 				"Unauthorized",
 			)
+		}
+
+		var isSuperAdmin bool
+		_ = database.DB.Raw("SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin'))", userID).Scan(&isSuperAdmin)
+		if isSuperAdmin {
+			return c.Next()
 		}
 
 		var allowed bool
@@ -44,14 +51,46 @@ func RequirePermission(permission string) fiber.Handler {
 			)
 		}
 
-		if !allowed {
-			return helper.Error(
-				c,
-				403,
-				"Forbidden: you do not have permission to perform this action",
-			)
+		if allowed {
+			return c.Next()
 		}
 
-		return c.Next()
+		var userRole string
+		_ = database.DB.Raw("SELECT LOWER(r.name) FROM user_roles ur JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? LIMIT 1", userID).Scan(&userRole)
+
+		switch userRole {
+		case "institution admin", "institution_admin", "institution-admin":
+			return c.Next()
+		case "faculty":
+			switch permission {
+			case constants.PermissionCreateFaculties, constants.PermissionViewFaculties, constants.PermissionViewIDFaculties, constants.PermissionUpdateFaculties,
+				constants.PermissionViewStudents, constants.PermissionViewStudentsID, constants.StudentMonth,
+				constants.PermissionViewDepartments, constants.PermissionViewIDDepartments,
+				constants.PermissionViewInstitutes, constants.PermissionViewIDInstitutes,
+				constants.PermissionViewFees, constants.PermissionViewPayments, constants.PermissionViewIDPayments:
+				return c.Next()
+			}
+		case "student":
+			switch permission {
+			case constants.PermissionCreateStudents, constants.PermissionViewStudents, constants.PermissionViewStudentsID, constants.PermissionUpdateStudents,
+				constants.PermissionViewFaculties, constants.PermissionViewIDFaculties,
+				constants.PermissionViewDepartments, constants.PermissionViewIDDepartments,
+				constants.PermissionViewInstitutes, constants.PermissionViewIDInstitutes,
+				constants.PermissionViewFees, constants.PermissionViewPayments, constants.PermissionViewIDPayments:
+				return c.Next()
+			}
+		case "principal":
+			switch permission {
+			case constants.PermissionCreatePrincipals, constants.PermissionViewPrincipals, constants.PermissionViewIDPrincipals, constants.PermissionUpdatePrincipals,
+				constants.PermissionCreateFaculties, constants.PermissionViewFaculties, constants.PermissionViewIDFaculties, constants.PermissionUpdateFaculties,
+				constants.PermissionViewStudents, constants.PermissionViewStudentsID, constants.StudentMonth,
+				constants.PermissionViewDepartments, constants.PermissionViewIDDepartments,
+				constants.PermissionViewInstitutes, constants.PermissionViewIDInstitutes,
+				constants.PermissionViewFees, constants.PermissionViewPayments, constants.PermissionViewIDPayments:
+				return c.Next()
+			}
+		}
+
+		return helper.Error(c, 403, "Access denied")
 	}
 }

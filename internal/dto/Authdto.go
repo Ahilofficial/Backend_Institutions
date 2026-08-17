@@ -47,6 +47,7 @@ type AuthResponseDTO struct {
 	RefreshToken string `json:"refresh_token"`
 	UserID       uint   `json:"user_id"`
 	SessionID    string `json:"session_id"`
+	Role         string `json:"role,omitempty"`
 }
 
 type AssignRoleDTO struct {

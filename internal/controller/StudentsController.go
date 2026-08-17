@@ -33,6 +33,21 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 		return helper.Error(c, 400, "name is required")
 	}
 
+	userFacultyID, _ := cl.studentService.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		if student.FacultyID == 0 {
+			student.FacultyID = userFacultyID
+		}
+		student.UserID = 0
+	} else {
+		userExistingType, _ := cl.studentService.GetUserExistingProfile(userID)
+		if userExistingType == "student" || userExistingType == "" {
+			student.UserID = userID
+		} else {
+			student.UserID = 0
+		}
+	}
+
 	if student.FacultyID == 0 {
 		return helper.Error(c, 400, "faculty_id is required")
 	}
@@ -49,7 +64,7 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	return helper.Success(c, "succcess", createdStudent)
+	return helper.Success(c, "Student created successfully", dto.ToStudentResponseDTO(createdStudent))
 }
 func (cl *StudentController) GetActiveStudentController(c fiber.Ctx) error {
 	student, err := cl.studentService.GetActiveStudentService()
@@ -286,4 +301,41 @@ func (c *StudentController) FetchStudentsNotPaidByMonth(ctx fiber.Ctx) error {
 	}
 
 	return helper.Success(ctx, "Not paid students for month fetched successfully", dto.ToStudentResponseListDTO(students))
+}
+
+func (c *StudentController) FetchFacultyPaidStudents(ctx fiber.Ctx) error {
+	userID, _ := ctx.Locals("user_id").(uint)
+	month := strings.TrimSpace(ctx.Query("month"))
+	facultyID, _ := strconv.ParseUint(ctx.Query("faculty_id"), 10, 32)
+
+	students, err := c.studentService.FetchFacultyPaidStudentsService(userID, uint(facultyID), month)
+	if err != nil {
+		return helper.Error(ctx, fiber.StatusBadRequest, err.Error())
+	}
+
+	return helper.Success(ctx, "Faculty paid students fetched successfully", dto.ToStudentResponseListDTO(students))
+}
+
+func (c *StudentController) FetchFacultyUnpaidStudents(ctx fiber.Ctx) error {
+	userID, _ := ctx.Locals("user_id").(uint)
+	month := strings.TrimSpace(ctx.Query("month"))
+	facultyID, _ := strconv.ParseUint(ctx.Query("faculty_id"), 10, 32)
+
+	students, err := c.studentService.FetchFacultyUnpaidStudentsService(userID, uint(facultyID), month)
+	if err != nil {
+		return helper.Error(ctx, fiber.StatusBadRequest, err.Error())
+	}
+
+	return helper.Success(ctx, "Faculty unpaid students fetched successfully", dto.ToStudentResponseListDTO(students))
+}
+
+func (c *StudentController) GetLoggedInStudentController(ctx fiber.Ctx) error {
+	userID, _ := ctx.Locals("user_id").(uint)
+
+	student, err := c.studentService.GetLoggedInStudentProfile(userID)
+	if err != nil {
+		return helper.Error(ctx, fiber.StatusNotFound, err.Error())
+	}
+
+	return helper.Success(ctx, "LoggedIn student profile fetched successfully", dto.ToStudentResponseDTO(student))
 }

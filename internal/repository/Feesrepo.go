@@ -74,7 +74,7 @@ func (r *FeesRepository) FetchFeesPaginated(search string, page, limit int) ([]m
 			)
 		`, searchPattern, searchPattern, searchPattern, searchPattern)
 
-	// Count records
+	
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}

@@ -36,6 +36,8 @@ func (cl *PrincipalControllers) CreatePrincipalController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "institution_id is required")
 	}
 
+	principal.UserID = userID
+
 	createdPrincipal, err := cl.principalService.CreatePrincipalService(
 		userID,
 		&principal,

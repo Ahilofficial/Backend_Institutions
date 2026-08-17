@@ -3,9 +3,11 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
+	"backend_institutions/internal/model"
 	"backend_institutions/internal/services"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -19,6 +21,12 @@ func NewUserController(userService *services.UserService) *UserController {
 }
 
 func (cl *UserController) SignUpController(c fiber.Ctx) error {
+	role := strings.TrimSpace(c.Params("role"))
+	if role == "" {
+		role = strings.TrimSpace(c.Query("role"))
+	}
+	role = strings.ReplaceAll(role, "-", " ")
+
 	var body dto.SignUpDTO
 	body.Sanitize()
 
@@ -30,15 +38,26 @@ func (cl *UserController) SignUpController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	user, err := cl.userService.SignUp(&body)
+	var user model.User
+	var err error
+
+	if role != "" {
+		user, err = cl.userService.SignUpWithRole(&body, role)
+	} else {
+		user, err = cl.userService.SignUp(&body)
+	}
+
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	return helper.Success(c, "Signed up successfully", dto.ToUserResponseDTO(&user))
+	msg := "Signed up successfully"
+	if role != "" {
+		msg = fmt.Sprintf("Signed up successfully as %s", role)
+	}
+
+	return helper.Success(c, msg, dto.ToUserResponseDTO(&user))
 }
-
-
 
 func (cl *UserController) SignInController(c fiber.Ctx) error {
 	var body dto.SignInDTO
@@ -52,7 +71,7 @@ func (cl *UserController) SignInController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	accessToken, refreshToken, user_id, session_id, err := cl.userService.SignIn(&body, c)
+	accessToken, refreshToken, user_id, session_id, role, err := cl.userService.SignIn(&body, c)
 	if err != nil {
 		return helper.Error(c, 401, err.Error())
 	}
@@ -62,6 +81,7 @@ func (cl *UserController) SignInController(c fiber.Ctx) error {
 		SessionID:    session_id,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
+		Role:         role,
 	})
 }
 
@@ -153,15 +173,15 @@ func (cl *UserController) ResetPassword(c fiber.Ctx) error {
 
 func (cl *UserController) Logout(c fiber.Ctx) error {
 	var body dto.LogoutDTO
+	_ = c.Bind().Body(&body)
 
-	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid payload format")
+	if body.UserID == 0 {
+		if uID, ok := c.Locals("user_id").(uint); ok {
+			body.UserID = uID
+		}
 	}
 
-	if err := cl.userService.Logout(&body); err != nil {
-		return helper.Error(c, 400, err.Error())
-	}
-
+	_ = cl.userService.Logout(&body)
 	return helper.Success(c, "Logout successful", nil)
 }
 

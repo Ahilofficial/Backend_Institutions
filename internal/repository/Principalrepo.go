@@ -37,8 +37,8 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 		  AND NOT EXISTS (
 			  SELECT 1
 			  FROM principals
-			  WHERE name = ?
-			    AND institution_id = ?
+			  WHERE user_id = ?
+			    AND user_id > 0
 			    AND deleted_at IS NULL
 		  )`,
 		principal.Name,
@@ -49,8 +49,7 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 		now,
 		true,
 		principal.InstitutionID,
-		principal.Name,
-		principal.InstitutionID,
+		principal.UserID,
 	)
 	if err != nil {
 		return err
@@ -62,7 +61,7 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 	}
 
 	if rows == 0 {
-		return errors.New("principal name already exists in this institution, or parent institution is inactive/invalid")
+		return errors.New("principal profile already exists for this user, or parent institution is inactive/invalid")
 	}
 
 	id, err := res.LastInsertId()
@@ -74,6 +73,10 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 	principal.CreatedAt = now
 	principal.UpdatedAt = now
 	principal.IsActive = true
+
+	if principal.UserID != 0 {
+		db.Exec("UPDATE users SET principal_id = ? WHERE id = ?", principal.ID, principal.UserID)
+	}
 
 	return nil
 }
@@ -239,6 +242,12 @@ func (r *PrincipalRepository) GetInstitutionIDByPrincipal(principalID uint) (uin
 	}
 
 	return institutionID, nil
+}
+
+func (r *PrincipalRepository) FetchByUserID(userID uint) (model.Principal, error) {
+	var pr model.Principal
+	err := r.db.Raw("SELECT * FROM principals WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&pr).Error
+	return pr, err
 }
 
 func (r *PrincipalRepository) ExistsByUserID(userID uint) (bool, error) {

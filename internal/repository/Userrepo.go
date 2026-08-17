@@ -477,36 +477,23 @@ func (r *UserRepository) UpdatePassword(id uint, password string) error {
 }
 
 func (r *UserRepository) Logout(dto *dto.LogoutDTO) error {
-	var sessionID string
-	query := `
-		SELECT session_id
-		FROM sessions
-		WHERE user_id = ?
-		  AND refresh_token = ?
-		  AND is_active = TRUE
-		LIMIT 1
-	`
-
-	err := r.db.Raw(query, dto.UserID, dto.Token).Scan(&sessionID).Error
-	if err != nil {
-		return err
+	if dto.Token != "" {
+		_ = r.db.Exec(`
+			UPDATE sessions
+			SET access_token = NULL, refresh_token = NULL, is_active = FALSE
+			WHERE refresh_token = ?
+		`, dto.Token).Error
 	}
 
-	if sessionID == "" {
-		return errors.New("invalid session or already logged out")
+	if dto.UserID > 0 {
+		_ = r.db.Exec(`
+			UPDATE sessions
+			SET access_token = NULL, refresh_token = NULL, is_active = FALSE
+			WHERE user_id = ? AND is_active = TRUE
+		`, dto.UserID).Error
 	}
 
-	update := `
-		UPDATE sessions
-		SET
-			access_token = NULL,
-			refresh_token = NULL,
-			is_active = FALSE
-		WHERE
-			session_id = ?
-	`
-
-	return r.db.Exec(update, sessionID).Error
+	return nil
 }
 
 func (r *UserRepository) FindByID(userID uint) (model.User, error) {
@@ -602,42 +589,76 @@ func (r *UserRepository) ValidateUser(userID uint) error {
 		return result.Error
 	}
 
-	if user.StudentID != 0 || user.FacultyID != 0 || user.PrincipalID != 0 {
-		return errors.New("user is already mapped to an existing entity (student, faculty, or principal)")
+	return nil
+}
+
+func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
+	if userID == 0 {
+		return 0, nil
+	}
+	var facultyID uint
+	_ = r.db.Raw("SELECT COALESCE(faculty_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&facultyID)
+	return facultyID, nil
+}
+
+func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
+	if userID == 0 {
+		return 0, nil
+	}
+	var studentID uint
+	_ = r.db.Raw("SELECT COALESCE(student_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&studentID)
+	return studentID, nil
+}
+
+func (r *UserRepository) GetUserPrincipalID(userID uint) (uint, error) {
+	if userID == 0 {
+		return 0, nil
+	}
+	var principalID uint
+	_ = r.db.Raw("SELECT COALESCE(principal_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&principalID)
+	return principalID, nil
+}
+
+func (r *UserRepository) CheckUserExistingProfile(userID uint) (string, error) {
+	if userID == 0 {
+		return "", nil
 	}
 
-	return nil
+	var profile struct {
+		ID          uint `gorm:"column:id"`
+		StudentID   uint `gorm:"column:student_id"`
+		FacultyID   uint `gorm:"column:faculty_id"`
+		PrincipalID uint `gorm:"column:principal_id"`
+	}
+	err := r.db.Raw("SELECT id, COALESCE(student_id, 0) AS student_id, COALESCE(faculty_id, 0) AS faculty_id, COALESCE(principal_id, 0) AS principal_id FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&profile).Error
+	if err != nil {
+		return "", err
+	}
+
+	if profile.StudentID > 0 {
+		return "student", nil
+	}
+	if profile.FacultyID > 0 {
+		return "faculty", nil
+	}
+	if profile.PrincipalID > 0 {
+		return "principal", nil
+	}
+
+	return "", nil
 }
 
 func (r *UserRepository) UpdateUserStudentID(userID uint, studentID uint) error {
-	res := r.db.Exec("UPDATE users SET student_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND student_id IS NULL AND faculty_id IS NULL AND principal_id IS NULL", studentID, userID)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return errors.New("user is already assigned to an entity or not found")
-	}
-	return nil
+	res := r.db.Exec("UPDATE users SET student_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND (faculty_id IS NULL OR faculty_id = 0) AND (principal_id IS NULL OR principal_id = 0)", studentID, userID)
+	return res.Error
 }
 
 func (r *UserRepository) UpdateUserFacultyID(userID uint, facultyID uint) error {
-	res := r.db.Exec("UPDATE users SET faculty_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND student_id IS NULL AND faculty_id IS NULL AND principal_id IS NULL", facultyID, userID)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return errors.New("user is already assigned to an entity or not found")
-	}
-	return nil
+	res := r.db.Exec("UPDATE users SET faculty_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND (student_id IS NULL OR student_id = 0) AND (principal_id IS NULL OR principal_id = 0)", facultyID, userID)
+	return res.Error
 }
 
 func (r *UserRepository) UpdateUserPrincipalID(userID uint, principalID uint) error {
-	res := r.db.Exec("UPDATE users SET principal_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND student_id IS NULL AND faculty_id IS NULL AND principal_id IS NULL", principalID, userID)
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return errors.New("user is already assigned to an entity or not found")
-	}
-	return nil
+	res := r.db.Exec("UPDATE users SET principal_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND (student_id IS NULL OR student_id = 0) AND (faculty_id IS NULL OR faculty_id = 0)", principalID, userID)
+	return res.Error
 }

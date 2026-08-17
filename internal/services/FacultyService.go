@@ -60,17 +60,9 @@ func (s *FacultyService) CreateFacultyService(userID uint, faculty *model.Facult
 		return model.Faculty{}, err
 	}
 
-	exists, err := s.facultyRepo.ExistsByUserID(
-		faculty.UserID,
-	)
-	if err != nil {
-		return model.Faculty{}, err
-	}
-
-	if exists {
-		return model.Faculty{}, errors.New(
-			"user is already a faculty",
-		)
+	existingType, err := s.userRepo.CheckUserExistingProfile(faculty.UserID)
+	if err == nil && existingType != "" {
+		return model.Faculty{}, errors.New("user is already registered as a " + existingType)
 	}
 
 	if err := s.facultyRepo.CreateFaculty(faculty); err != nil {
@@ -103,10 +95,16 @@ func (s *FacultyService) GetFacultyServicePaginated(
 }
 
 func (s *FacultyService) GetFacultyServiceById(userID uint, id uint) (*model.Faculty, error) {
-	user, err := s.userRepo.FindByID(userID)
-	if err == nil && user.FacultyID > 0 {
-		if user.FacultyID != id {
-			return nil, errors.New("access denied")
+	isSuper, _ := s.userRepo.IsSuperAdmin(userID)
+	instAdminID, _ := s.userRepo.GetUserInstitutionID(userID)
+
+	if !isSuper && instAdminID == 0 {
+		userFacultyID, err := s.userRepo.GetUserFacultyID(userID)
+		if err != nil || userFacultyID == 0 {
+			return nil, errors.New("access denied: faculty profile not created yet")
+		}
+		if userFacultyID != id {
+			return nil, errors.New("access denied: you can only access your own faculty profile")
 		}
 	}
 
@@ -130,6 +128,22 @@ func (s *FacultyService) GetFacultyServiceById(userID uint, id uint) (*model.Fac
 	}
 
 	return &faculty, nil
+}
+
+func (s *FacultyService) GetLoggedInFacultyProfile(userID uint) (*model.Faculty, error) {
+	facultyID, err := s.userRepo.GetUserFacultyID(userID)
+	if err != nil || facultyID == 0 {
+		return nil, errors.New("faculty profile not created yet for logged in user")
+	}
+	return s.GetFacultyServiceById(userID, facultyID)
+}
+
+func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Student, error) {
+	facultyID, err := s.userRepo.GetUserFacultyID(userID)
+	if err != nil || facultyID == 0 {
+		return nil, errors.New("faculty profile not created yet for logged in user")
+	}
+	return s.facultyRepo.FetchStudentsByFacultyID(facultyID)
 }
 
 func (s *FacultyService) GetFacultyServiceDeleted() ([]model.Faculty, error) {
@@ -175,6 +189,18 @@ func (s *FacultyService) UpdateFacultyService(
 	id uint,
 	dto *dto.UpdateFacultyDTO,
 ) error {
+	isSuper, _ := s.userRepo.IsSuperAdmin(userID)
+	instAdminID, _ := s.userRepo.GetUserInstitutionID(userID)
+
+	if !isSuper && instAdminID == 0 {
+		userFacultyID, err := s.userRepo.GetUserFacultyID(userID)
+		if err != nil || userFacultyID == 0 {
+			return errors.New("access denied: faculty profile not created yet")
+		}
+		if userFacultyID != id {
+			return errors.New("access denied: you can only update your own faculty profile")
+		}
+	}
 
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {

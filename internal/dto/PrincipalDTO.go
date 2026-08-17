@@ -14,7 +14,6 @@ type CreatePrincipalDTO struct {
 	Gender        string    `json:"gender"`
 	JoiningDate   time.Time `json:"joining_date"`
 	InstitutionID uint      `json:"institution_id"`
-	UserID        uint      `json:"user_id"`
 }
 
 func (dto *CreatePrincipalDTO) Sanitize() {
