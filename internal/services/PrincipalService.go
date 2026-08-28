@@ -46,30 +46,36 @@ func (s *PrincipalService) CreatePrincipalService(userID uint, principal *model.
 		return model.Principal{}, errors.New("institution_id is required")
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		principal.InstitutionID,
-	); err != nil {
-		return model.Principal{}, err
+	targetUserID := userID
+	if principal.UserID > 0 {
+		targetUserID = principal.UserID
 	}
 
-	if err := s.userRepo.ValidateUser(principal.UserID); err != nil {
-		return model.Principal{}, err
+	if principal.UserID != 0 && principal.UserID != userID {
+		if err := s.checkInstitutionAccess(userID, principal.InstitutionID); err != nil {
+			return model.Principal{}, err
+		}
 	}
 
-	existingType, err := s.userRepo.CheckUserExistingProfile(principal.UserID)
-	if err == nil && existingType != "" {
-		return model.Principal{}, errors.New("user is already registered as a " + existingType)
+	if targetUserID > 0 {
+		if err := s.userRepo.ValidateUser(targetUserID); err != nil {
+			return model.Principal{}, err
+		}
+
+		existingType, err := s.userRepo.CheckUserExistingProfile(targetUserID)
+		if err == nil && existingType != "" {
+			return model.Principal{}, errors.New("user is already registered as a " + existingType)
+		}
 	}
 
+	principal.UserID = targetUserID
 	if err := s.principalRepo.CreatePrincipal(principal); err != nil {
 		return model.Principal{}, err
 	}
 
 	if principal.UserID != 0 {
-		if err := s.userRepo.UpdateUserPrincipalID(principal.UserID, principal.ID); err != nil {
-			return model.Principal{}, err
-		}
+		_ = s.userRepo.UpdateUserPrincipalID(principal.UserID, principal.ID)
+		_ = s.userRepo.AssignRoleByName(principal.UserID, "principal")
 	}
 
 	return *principal, nil
@@ -91,24 +97,25 @@ func (s *PrincipalService) GetPrincipalServicePaginated(
 	)
 }
 
-func (s *PrincipalService) GetPrincipalServiceById(userID uint, id uint) (*model.Principal, error) {
-	user, err := s.userRepo.FindByID(userID)
-	if err == nil && user.PrincipalID > 0 {
-		if user.PrincipalID != id {
-			return nil, errors.New("access denied")
-		}
-	}
-
+func (s *PrincipalService) GetPrincipalServiceById(
+	userID uint,
+	id uint,
+) (*model.Principal, error) {
 	principal, err := s.principalRepo.FetchPrincipalById(id)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		principal.InstitutionID,
-	); err != nil {
-		return nil, err
+	userPrincipalID, _ := s.userRepo.GetUserPrincipalID(userID)
+	if userPrincipalID > 0 {
+		if userPrincipalID != id {
+			return nil, errors.New("access denied: you can only access your own principal profile")
+		}
+		return &principal, nil
+	}
+
+	if err := s.checkInstitutionAccess(userID, principal.InstitutionID); err != nil {
+		return nil, errors.New("access denied: principal does not belong to your institution")
 	}
 
 	return &principal, nil
@@ -122,16 +129,18 @@ func (s *PrincipalService) DeletePrincipalService(
 	userID uint,
 	id uint,
 ) error {
+	userPrincipalID, _ := s.userRepo.GetUserPrincipalID(userID)
+	if userPrincipalID > 0 {
+		return errors.New("access denied: principal cannot delete principal profiles")
+	}
+
 	principal, err := s.principalRepo.FetchPrincipalById(id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		principal.InstitutionID,
-	); err != nil {
-		return err
+	if err := s.checkInstitutionAccess(userID, principal.InstitutionID); err != nil {
+		return errors.New("access denied: principal does not belong to your institution")
 	}
 
 	return s.principalRepo.DeletePrincipal(id)
@@ -148,27 +157,25 @@ func (s *PrincipalService) GetInactivePrincipalService() (model.Principal, error
 func (s *PrincipalService) UpdatePrincipalService(
 	userID uint,
 	id uint,
-	dto *dto.UpdatePrincipalDTO,
+	req *dto.UpdatePrincipalDTO,
 ) error {
-
 	principal, err := s.principalRepo.FetchPrincipalById(id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		principal.InstitutionID,
-	); err != nil {
-		return err
+	userPrincipalID, _ := s.userRepo.GetUserPrincipalID(userID)
+	if userPrincipalID > 0 {
+		if userPrincipalID != id {
+			return errors.New("access denied: you can only update your own principal profile")
+		}
+	} else {
+		if err := s.checkInstitutionAccess(userID, principal.InstitutionID); err != nil {
+			return errors.New("access denied: cannot update this principal profile")
+		}
 	}
 
-	if dto.Name != "" {
-		principal.Name = dto.Name
-	}
-	if dto.Gender != "" {
-		principal.Gender = dto.Gender
-	}
-
+	principal.Name = req.Name
+	principal.Gender = req.Gender
 	return s.principalRepo.UpdatePrincipalById(&principal)
 }

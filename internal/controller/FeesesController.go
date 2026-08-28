@@ -65,9 +65,8 @@ func (cl *FeesController) CreateFeesController(c fiber.Ctx) error {
 		&feeObj,
 	)
 	if err != nil {
-
-		if strings.HasPrefix(err.Error(), "access denied") {
-			return helper.Error(c, 403, err.Error())
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, "Cant able to access other institution")
 		}
 
 		return helper.Error(c, 400, err.Error())
@@ -338,8 +337,7 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 		&req,
 	)
 	if err != nil {
-
-		if strings.HasPrefix(err.Error(), "access denied") {
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
 			return helper.Error(ctx, 403, err.Error())
 		}
 
@@ -351,30 +349,6 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 		"Payment created successfully",
 		payment,
 	)
-}
-
-func (c *StudentController) FetchPaidStudents(ctx fiber.Ctx) error {
-	userID, _ := ctx.Locals("user_id").(uint)
-	month := ctx.Query("month")
-
-	students, err := c.studentService.FetchPaidStudentsService(userID, month)
-	if err != nil {
-		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
-	}
-
-	return helper.Success(ctx, "Paid students fetched successfully", dto.ToStudentResponseListDTO(students))
-}
-
-func (c *StudentController) FetchNotPaidStudents(ctx fiber.Ctx) error {
-	userID, _ := ctx.Locals("user_id").(uint)
-	month := ctx.Query("month")
-
-	students, err := c.studentService.FetchNotPaidStudentsService(userID, month)
-	if err != nil {
-		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
-	}
-
-	return helper.Success(ctx, "Not paid students fetched successfully", dto.ToStudentResponseListDTO(students))
 }
 
 func (c *FeesController) FetchFeesByStudentID(ctx fiber.Ctx) error {
@@ -397,4 +371,21 @@ func (c *FeesController) FetchFeesByStudentID(ctx fiber.Ctx) error {
 	}
 
 	return helper.Success(ctx, "Fees fetched successfully", fees)
+}
+
+func (c *FeesController) GetMyFeesController(ctx fiber.Ctx) error {
+	userID, ok := ctx.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(ctx, 401, "Invalid user")
+	}
+
+	fees, err := c.feesService.GetMyFees(userID)
+	if err != nil {
+		if err.Error() == "access denied" {
+			return helper.Error(ctx, 403, "Access denied")
+		}
+		return helper.Error(ctx, fiber.StatusNotFound, err.Error())
+	}
+
+	return helper.Success(ctx, "Student fees fetched successfully", fees)
 }

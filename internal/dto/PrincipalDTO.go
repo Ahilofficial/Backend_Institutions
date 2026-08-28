@@ -63,6 +63,7 @@ type PrincipalResponseDTO struct {
 	Gender        string    `json:"gender"`
 	JoiningDate   time.Time `json:"joining_date"`
 	InstitutionID uint      `json:"institution_id"`
+	UserID        uint      `json:"user_id,omitempty"`
 	IsActive      bool      `json:"is_active"`
 }
 

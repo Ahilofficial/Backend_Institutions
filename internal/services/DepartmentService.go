@@ -6,6 +6,8 @@ import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
+
+	// "github.com/gofiber/fiber/v3"
 )
 
 type DepartmentService struct {
@@ -48,6 +50,7 @@ func (s *DepartmentService) checkInstitutionAccess(
 func (s *DepartmentService) AddDepartmentService(
 	userID uint,
 	department *model.Department,
+	// c *fiber.Ctx,
 ) (model.Department, error) {
 
 	if err := s.checkInstitutionAccess(
@@ -56,6 +59,9 @@ func (s *DepartmentService) AddDepartmentService(
 	); err != nil {
 		return model.Department{}, err
 	}
+	
+	
+	
 
 	if err := s.departmentRepo.CreateDepartment(department); err != nil {
 		return model.Department{}, err
@@ -85,17 +91,13 @@ func (s *DepartmentService) GetDepartmentByIDService(
 	userID uint,
 	id uint,
 ) (model.Department, error) {
-
 	department, err := s.departmentRepo.FetchDepartmentById(id)
 	if err != nil {
 		return model.Department{}, err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		department.InstitutionID,
-	); err != nil {
-		return model.Department{}, err
+	if err := s.checkInstitutionAccess(userID, department.InstitutionID); err != nil {
+		return model.Department{}, errors.New("access denied: department does not belong to your institution")
 	}
 
 	return department, nil
@@ -109,17 +111,13 @@ func (s *DepartmentService) DeleteDepartment(
 	userID uint,
 	id uint,
 ) error {
-
 	department, err := s.departmentRepo.FetchDepartmentById(id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		department.InstitutionID,
-	); err != nil {
-		return err
+	if err := s.checkInstitutionAccess(userID, department.InstitutionID); err != nil {
+		return errors.New("access denied: department does not belong to your institution")
 	}
 
 	return s.departmentRepo.DeleteDepartment(id)
@@ -138,20 +136,20 @@ func (s *DepartmentService) UpdateDepartmentService(
 	id uint,
 	req *dto.UpdateDepartmentDTO,
 ) error {
-
 	department, err := s.departmentRepo.FetchDepartmentById(id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		department.InstitutionID,
-	); err != nil {
-		return err
+	if err := s.checkInstitutionAccess(userID, department.InstitutionID); err != nil {
+		return errors.New("access denied: department does not belong to your institution")
 	}
 
 	department.DepartmentName = req.DepartmentName
-
 	return s.departmentRepo.UpdateDepartmentById(&department)
+}
+
+func(s *DepartmentService)GetInstitutionIDForUserService(id uint)(uint){
+	user_inst_id:=s.departmentRepo.GetInstitutionIDForUserRepo(id)
+	return user_inst_id
 }

@@ -25,27 +25,7 @@ func NewStudentService(
 	}
 }
 
-func (s *StudentService) checkInstitutionAccess(
-	userID uint,
-	institutionID uint,
-) error {
 
-	hasAccess, err := s.userRepo.HasInstitutionAccess(
-		userID,
-		institutionID,
-	)
-	if err != nil {
-		return err
-	}
-
-	if !hasAccess {
-		return errors.New(
-			"user does not have access to this institution",
-		)
-	}
-
-	return nil
-}
 
 func (s *StudentService) GetUserFacultyID(userID uint) (uint, error) {
 	return s.userRepo.GetUserFacultyID(userID)
@@ -58,47 +38,75 @@ func (s *StudentService) GetUserExistingProfile(userID uint) (string, error) {
 func (s *StudentService) CreateStudentService(
 	userID uint,
 	student *model.Student,
+	createstudent *dto.CreateStudentDTO,
 ) (*model.Student, error) {
-
-	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
-		student.FacultyID,
-	)
-	if err != nil {
-		return nil, err
+	faculty, err := s.facultyRepo.FetchFacultyById(student.FacultyID)
+	if err != nil || faculty.ID == 0 {
+		return nil, errors.New("faculty not found")
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return nil, err
-	}
-
+	targetUserID := userID
 	if student.UserID > 0 {
-		if err := s.userRepo.ValidateUser(student.UserID); err != nil {
+		targetUserID = student.UserID
+	}
+
+	if targetUserID > 0 {
+		if err := s.userRepo.ValidateUser(targetUserID); err != nil {
 			return nil, err
 		}
 
-		existingType, err := s.userRepo.CheckUserExistingProfile(student.UserID)
+		existingType, err := s.userRepo.CheckUserExistingProfile(targetUserID)
 		if err == nil && existingType != "" {
 			return nil, errors.New("user is already registered as a " + existingType)
 		}
 	}
+	
 
+	student.UserID = targetUserID
 	if err := s.studentRepo.CreateStudent(student); err != nil {
 		return nil, err
 	}
 
-	if student.UserID != 0 {
-		if err := s.userRepo.UpdateUserStudentID(student.UserID, student.ID); err != nil {
-			return nil, err
-		}
+	
+	if createstudent.Rank<=100{
+		student.Scholorship=true
+	}
+	if createstudent.Scholorship==true && createstudent.Rank<100{
+		student.FeeAmount = student.FeeAmount - (student.FeeAmount * 25 / 100)
+	}
+	if createstudent.Scholorship==true && createstudent.Rank<50{
+		student.FeeAmount = student.FeeAmount - (student.FeeAmount * 25 / 100)
+	}
+	if createstudent.Rank>100{
+		student.MQ=true
+	}
+	if student.MQ==true{
+		student.FeeAmount=student.FeeAmount+(student.FeeAmount*50/100)
+	}
+	var model model.Payment
+	err:=c.Bind().Body(&model);err!=nil{
+		return nil, nil
+	}
+	return student, nil
 	}
 
-	return student, nil
-}
+
+
+	
+
 
 func (s *StudentService) FetchAllStudentsServices() ([]model.Student, error) {
+	return s.studentRepo.FetchStudent()
+}
+
+func (s *StudentService) FetchAllStudentsServicesScoped(userID uint) ([]model.Student, error) {
+	instID, err := s.resolveInstitutionScope(userID, 0)
+	if err != nil {
+		return nil, err
+	}
+	if instID > 0 {
+		return s.studentRepo.FetchStudentByInstitution(instID)
+	}
 	return s.studentRepo.FetchStudent()
 }
 
@@ -114,50 +122,107 @@ func (s *StudentService) FetchAllStudentsPaginatedServices(
 	)
 }
 
+func (s *StudentService) FetchAllStudentsPaginatedServicesScoped(
+	userID uint,
+	search string,
+	page int,
+	limit int,
+) ([]model.Student, int64, error) {
+	instID, err := s.resolveInstitutionScope(userID, 0)
+	if err != nil {
+		return nil, 0, err
+	}
+	if instID > 0 {
+		return s.studentRepo.FetchStudentPaginatedWithInstitution(search, page, limit, instID)
+	}
+	return s.studentRepo.FetchStudentPaginated(search, page, limit)
+}
+
 func (s *StudentService) GetStudentServiceById(
 	userID uint,
 	id uint,
 ) (*model.Student, error) {
-	isSuper, _ := s.userRepo.IsSuperAdmin(userID)
-	instAdminID, _ := s.userRepo.GetUserInstitutionID(userID)
 
+	// Get logged-in user's role ID
+	roleID, err := s.userRepo.GetUserRoleID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get requested student
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil {
 		return nil, err
 	}
 
-	if !isSuper && instAdminID == 0 {
-		userStudentID, _ := s.userRepo.GetUserStudentID(userID)
-		userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
-
-		if userStudentID > 0 {
-			if userStudentID != id {
-				return nil, errors.New("access denied: you can only access your own student profile")
-			}
-		} else if userFacultyID > 0 {
-			if student.FacultyID != userFacultyID {
-				return nil, errors.New("access denied: student does not belong to your faculty")
-			}
-		} else {
-			return nil, errors.New("access denied: profile not created yet")
-		}
-	}
-
-	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
-		student.FacultyID,
-	)
+	// Check whether this role is a SuperAdmin role
+	isSuper, err := s.userRepo.IsSuperAdminByRoleID(roleID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
+	if isSuper {
+		return &student, nil
+	}
+
+	// Check whether this role is assigned as an Institution Admin
+	institutionID, err := s.userRepo.GetInstitutionAdminID(userID)
+	if err != nil {
 		return nil, err
 	}
 
-	return &student, nil
+	if institutionID != 0 {
+
+		studentInstitutionID, err :=
+			s.facultyRepo.GetInstitutionByFacultyID(student.FacultyID)
+		if err != nil {
+			return nil, err
+		}
+
+		if institutionID != studentInstitutionID {
+			return nil, errors.New(
+				"access denied: student does not belong to your institution",
+			)
+		}
+
+		return &student, nil
+	}
+
+	
+	userStudentID, err := s.userRepo.GetUserStudentID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if userStudentID != 0 {
+
+		if userStudentID != id {
+			return nil, errors.New(
+				"access denied: you can only access your own student profile",
+			)
+		}
+
+		return &student, nil
+	}
+
+	// Check whether logged-in user has a Faculty profile
+	userFacultyID, err := s.userRepo.GetUserFacultyID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if userFacultyID != 0 {
+
+		if student.FacultyID != userFacultyID {
+			return nil, errors.New(
+				"access denied: student does not belong to your faculty",
+			)
+		}
+
+		return &student, nil
+	}
+
+	return nil, errors.New("access denied: profile not created yet")
 }
 
 func (s *StudentService) GetLoggedInStudentProfile(userID uint) (*model.Student, error) {
@@ -168,34 +233,77 @@ func (s *StudentService) GetLoggedInStudentProfile(userID uint) (*model.Student,
 	return s.GetStudentServiceById(userID, studentID)
 }
 
+func (s *StudentService) resolveInstitutionScope(userID uint, requestedInstID uint) (uint, error) {
+	isInstAdmin, assignedInstID, _ := s.userRepo.IsInstitutionAdmin(userID)
+	if isInstAdmin {
+		if assignedInstID == 0 {
+			return 0, errors.New("cant able to access other institution")
+		}
+		if requestedInstID > 0 && requestedInstID != assignedInstID {
+			return 0, errors.New("cant able to access other institution")
+		}
+		return assignedInstID, nil
+	}
+
+	isSuper, _ := s.userRepo.IsSuperAdmin(userID)
+	if isSuper {
+		return requestedInstID, nil
+	}
+
+	userInstID, _ := s.userRepo.GetUserInstitutionID(userID)
+	if userInstID > 0 {
+		if requestedInstID > 0 && requestedInstID != userInstID {
+			return 0, errors.New("cant able to access other institution")
+		}
+		return userInstID, nil
+	}
+
+	return 0, nil
+}
+
 func (s *StudentService) FetchStudentsByPaymentMonthService(
 	userID uint,
 	month string,
 ) ([]model.Student, error) {
-	facultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	instID, _ := s.userRepo.GetUserInstitutionID(userID)
-	return s.studentRepo.FetchPaidStudentsByMonth(instID, facultyID, month)
+	return s.FetchPaidStudentsService(userID, month)
 }
 
 func (s *StudentService) FetchStudentsNotPaidByMonthService(
 	userID uint,
 	month string,
 ) ([]model.Student, error) {
-	facultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	instID, _ := s.userRepo.GetUserInstitutionID(userID)
-	return s.studentRepo.FetchNotPaidStudentsByMonth(instID, facultyID, month)
+	return s.FetchNotPaidStudentsService(userID, month)
 }
 
 func (s *StudentService) FetchPaidStudentsService(userID uint, month string) ([]model.Student, error) {
+	instID, err := s.resolveInstitutionScope(userID, 0)
+	if err != nil {
+		return nil, err
+	}
 	facultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	instID, _ := s.userRepo.GetUserInstitutionID(userID)
 	return s.studentRepo.FetchPaidStudentsByMonth(instID, facultyID, month)
 }
 
 func (s *StudentService) FetchNotPaidStudentsService(userID uint, month string) ([]model.Student, error) {
+	instID, err := s.resolveInstitutionScope(userID, 0)
+	if err != nil {
+		return nil, err
+	}
 	facultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	instID, _ := s.userRepo.GetUserInstitutionID(userID)
 	return s.studentRepo.FetchNotPaidStudentsByMonth(instID, facultyID, month)
+}
+
+func (s *StudentService) FetchAllStudentsMonthOverviewService(
+	userID uint,
+	requestedInstID uint,
+	month string,
+) (dto.MonthlyStudentsOverviewDTO, error) {
+	instID, err := s.resolveInstitutionScope(userID, requestedInstID)
+	if err != nil {
+		return dto.MonthlyStudentsOverviewDTO{}, err
+	}
+	facultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	return s.studentRepo.FetchAllStudentsMonthOverview(instID, facultyID, month)
 }
 
 func (s *StudentService) FetchFacultyPaidStudentsService(userID uint, facultyIDParam uint, month string) ([]model.Student, error) {
@@ -206,7 +314,10 @@ func (s *StudentService) FetchFacultyPaidStudentsService(userID uint, facultyIDP
 		targetFacultyID, _ = s.userRepo.GetUserFacultyID(userID)
 	}
 
-	instID, _ := s.userRepo.GetUserInstitutionID(userID)
+	instID, err := s.resolveInstitutionScope(userID, 0)
+	if err != nil {
+		return nil, err
+	}
 	return s.studentRepo.FetchPaidStudentsByMonth(instID, targetFacultyID, month)
 }
 
@@ -218,7 +329,10 @@ func (s *StudentService) FetchFacultyUnpaidStudentsService(userID uint, facultyI
 		targetFacultyID, _ = s.userRepo.GetUserFacultyID(userID)
 	}
 
-	instID, _ := s.userRepo.GetUserInstitutionID(userID)
+	instID, err := s.resolveInstitutionScope(userID, 0)
+	if err != nil {
+		return nil, err
+	}
 	return s.studentRepo.FetchNotPaidStudentsByMonth(instID, targetFacultyID, month)
 }
 
@@ -233,61 +347,56 @@ func (s *StudentService) GetInactiveStudentService() (model.Student, error) {
 func (s *StudentService) UpdateStudentService(
 	userID uint,
 	id uint,
-	dto *dto.UpdateStudentDTO,
+	req *dto.UpdateStudentDTO,
 ) error {
-
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil {
 		return err
 	}
 
-	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
-		student.FacultyID,
-	)
-	if err != nil {
-		return err
+	// 1. If student updating their own record
+	userStudentID, _ := s.userRepo.GetUserStudentID(userID)
+	if userStudentID > 0 && userStudentID == id {
+		student.Name = req.Name
+		student.Gender = req.Gender
+		return s.studentRepo.UpdateStudentById(&student)
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
+	// 2. If faculty mentor updating their student
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 && student.FacultyID == userFacultyID {
+		student.Name = req.Name
+		student.Gender = req.Gender
+		return s.studentRepo.UpdateStudentById(&student)
 	}
 
-	if dto.Name != "" {
-		student.Name = dto.Name
-	}
-	if dto.Gender != "" {
-		student.Gender = dto.Gender
-	}
+	
 
+	
+
+	student.Name = req.Name
+	student.Gender = req.Gender
 	return s.studentRepo.UpdateStudentById(&student)
+}
+
+func (s *StudentService)GetInstitutionIDForUserService(studentID uint)uint{
+	students_institution_id:=s.studentRepo.GetInstitutionIDForUserRepo(studentID)
+	return students_institution_id
 }
 
 func (s *StudentService) DeleteStudentService(
 	userID uint,
 	id uint,
 ) error {
-
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil {
 		return err
 	}
 
-	institutionID, err := s.facultyRepo.GetInstitutionByFacultyID(
-		student.FacultyID,
-	)
-	if err != nil {
-		return err
+	// 1. Faculty mentor deleting their student
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 && student.FacultyID == userFacultyID {
+		return s.studentRepo.DeleteStudent(id)
 	}
-
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
-	}
-
 	return s.studentRepo.DeleteStudent(id)
 }

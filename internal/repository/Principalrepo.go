@@ -26,6 +26,11 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 
 	now := time.Now()
 
+	var userIDVal interface{} = nil
+	if principal.UserID > 0 {
+		userIDVal = principal.UserID
+	}
+
 	res, err := db.Exec(
 		`INSERT INTO principals
 			(name, gender, joining_date, institution_id, user_id, created_at, updated_at, is_active)
@@ -34,22 +39,22 @@ func (r *PrincipalRepository) CreatePrincipal(principal *model.Principal) error 
 		WHERE id = ?
 		  AND deleted_at IS NULL
 		  AND is_active = true
-		  AND NOT EXISTS (
+		  AND (? IS NULL OR NOT EXISTS (
 			  SELECT 1
 			  FROM principals
 			  WHERE user_id = ?
-			    AND user_id > 0
 			    AND deleted_at IS NULL
-		  )`,
+		  ))`,
 		principal.Name,
 		principal.Gender,
 		principal.JoiningDate,
-		principal.UserID,
+		userIDVal,
 		now,
 		now,
 		true,
 		principal.InstitutionID,
-		principal.UserID,
+		userIDVal,
+		userIDVal,
 	)
 	if err != nil {
 		return err

@@ -14,57 +14,81 @@ import (
 
 type StudentController struct {
 	studentService *services.StudentService
+	userService *services.UserService
+	instituteService *services.InstituteService
+	facultyService *services.FacultyService
 }
 
-func NewStudentController(studentService *services.StudentService) *StudentController {
-	return &StudentController{studentService: studentService}
+func NewStudentController(studentService *services.StudentService, userService *services.UserService, instituteService *services.InstituteService, facultyService *services.FacultyService) *StudentController {
+	return &StudentController{
+		studentService: studentService,
+		userService:userService,
+		instituteService: instituteService,
+		facultyService : facultyService,
+
+	}
 }
 
 func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(uint)
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "user not authenticated")
+	}
 
-	var student model.Student
+	var body dto.CreateStudentDTO
 
-	if err := c.Bind().Body(&student); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
-	if student.Name == "" {
-		return helper.Error(c, 400, "name is required")
+	body.Sanitize()
+
+	
+	user, err := cl.userService.GetUserByID(userID)
+	if err != nil || user == nil {
+		return helper.Error(c, 404, "user not found")
 	}
 
-	userFacultyID, _ := cl.studentService.GetUserFacultyID(userID)
-	if userFacultyID > 0 {
-		if student.FacultyID == 0 {
-			student.FacultyID = userFacultyID
-		}
-		student.UserID = 0
-	} else {
-		userExistingType, _ := cl.studentService.GetUserExistingProfile(userID)
-		if userExistingType == "student" || userExistingType == "" {
-			student.UserID = userID
-		} else {
-			student.UserID = 0
-		}
+	if user.FacultyID != 0 && body.FacultyID == 0 {
+		body.FacultyID = user.FacultyID
 	}
 
-	if student.FacultyID == 0 {
-		return helper.Error(c, 400, "faculty_id is required")
-	}
-
-	createdStudent, err := cl.studentService.CreateStudentService(
-		userID,
-		&student,
-	)
-	if err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
+	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	return helper.Success(c, "Student created successfully", dto.ToStudentResponseDTO(createdStudent))
+	var targetUserID uint
+	if user.StudentID == 0 {
+		targetUserID = userID
+	}
+
+	student := model.Student{
+		Name:      body.Name,
+		Gender:    body.Gender,
+		FacultyID: body.FacultyID,
+		UserID:    targetUserID,
+		IsActive:  true,
+	}
+
+	
+	createdStudent, err := cl.studentService.CreateStudentService(
+		userID,
+		&student,
+		CreateStudentDTO,
+	)
+	if err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
+	if targetUserID != 0 {
+		_ = cl.userService.UpdateStudentID(targetUserID, createdStudent.ID)
+	}
+	
+	return helper.Success(
+		c,
+		"Student created successfully",
+		dto.ToStudentResponseDTO(createdStudent),
+	)
 }
 func (cl *StudentController) GetActiveStudentController(c fiber.Ctx) error {
 	student, err := cl.studentService.GetActiveStudentService()
@@ -93,9 +117,8 @@ func (cl *StudentController) GetInactiveStudentController(c fiber.Ctx) error {
 }
 
 func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
-
 	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	if !ok || userID == 0 {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
@@ -103,17 +126,24 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		return helper.Error(c, 400, "invalid student id")
+		return helper.Error(c, 400, "invalid student ID")
 	}
 
+	studentID := uint(id)
+
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(studentID)
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
 	student, err := cl.studentService.GetStudentServiceById(
 		userID,
-		uint(id),
+		studentID,
 	)
 	if err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 404, err.Error())
@@ -126,24 +156,26 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	)
 }
 
-func (cl *StudentController) UpdateStudentControllers(c fiber.Ctx) error {
+
+
+func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 
 	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	if !ok || userID == 0 {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
-	idStr := c.Params("id")
+	idParam := c.Params("id")
 
-	id, err := strconv.ParseUint(idStr, 10, 32)
+	id, err := strconv.ParseUint(idParam, 10, 32)
 	if err != nil {
-		return helper.Error(c, 400, "invalid student id")
+		return helper.Error(c, 400, "Invalid student ID")
 	}
 
 	var body dto.UpdateStudentDTO
 
 	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid request body")
+		return helper.Error(c, 400, "Invalid request body")
 	}
 
 	body.Sanitize()
@@ -152,36 +184,26 @@ func (cl *StudentController) UpdateStudentControllers(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
+
+	// Business logic is handled inside the service
 	if err := cl.studentService.UpdateStudentService(
 		userID,
 		uint(id),
 		&body,
 	); err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
-		return helper.Error(c, 400, err.Error())
-	}
-
-	updated, err := cl.studentService.GetStudentServiceById(
-		userID,
-		uint(id),
-	)
-	if err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
-		return helper.Error(c, 500, err.Error())
+		return helper.Error(c, 403, err.Error())
 	}
 
 	return helper.Success(
 		c,
 		"Student updated successfully",
-		dto.ToStudentResponseDTO(updated),
+		nil,
 	)
 }
 
@@ -199,13 +221,20 @@ func (cl *StudentController) DeleteStudentControllers(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid student id")
 	}
 
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
+
 	if err := cl.studentService.DeleteStudentService(
 		userID,
 		uint(id),
 	); err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 400, err.Error())
@@ -219,8 +248,16 @@ func (cl *StudentController) DeleteStudentControllers(c fiber.Ctx) error {
 }
 
 func (cl *StudentController) FetchAllStudentsControllers(c fiber.Ctx) error {
-	students, err := cl.studentService.FetchAllStudentsServices()
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
+	students, err := cl.studentService.FetchAllStudentsServicesScoped(userID)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cant able to access") || strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, "Cant able to access other institution")
+		}
 		return helper.Error(c, 500, err.Error())
 	}
 
@@ -232,6 +269,11 @@ func (cl *StudentController) FetchAllStudentsControllers(c fiber.Ctx) error {
 }
 
 func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
 	search := c.Query("search")
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
@@ -251,8 +293,11 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 		}
 	}
 
-	students, total, err := cl.studentService.FetchAllStudentsPaginatedServices(search, page, limit)
+	students, total, err := cl.studentService.FetchAllStudentsPaginatedServicesScoped(userID, search, page, limit)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cant able to access") || strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, "Cant able to access other institution")
+		}
 		return helper.Error(c, 500, err.Error())
 	}
 
@@ -272,35 +317,11 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 }
 
 func (c *StudentController) FetchStudentsByPaymentMonth(ctx fiber.Ctx) error {
-	userID, _ := ctx.Locals("user_id").(uint)
-	month := strings.TrimSpace(ctx.Query("month"))
-
-	if month == "" {
-		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
-	}
-
-	students, err := c.studentService.FetchStudentsByPaymentMonthService(userID, month)
-	if err != nil {
-		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
-	}
-
-	return helper.Success(ctx, "Paid students for month fetched successfully", dto.ToStudentResponseListDTO(students))
+	return c.FetchPaidStudents(ctx)
 }
 
 func (c *StudentController) FetchStudentsNotPaidByMonth(ctx fiber.Ctx) error {
-	userID, _ := ctx.Locals("user_id").(uint)
-	month := strings.TrimSpace(ctx.Query("month"))
-
-	if month == "" {
-		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
-	}
-
-	students, err := c.studentService.FetchStudentsNotPaidByMonthService(userID, month)
-	if err != nil {
-		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
-	}
-
-	return helper.Success(ctx, "Not paid students for month fetched successfully", dto.ToStudentResponseListDTO(students))
+	return c.FetchNotPaidStudents(ctx)
 }
 
 func (c *StudentController) FetchFacultyPaidStudents(ctx fiber.Ctx) error {
@@ -338,4 +359,117 @@ func (c *StudentController) GetLoggedInStudentController(ctx fiber.Ctx) error {
 	}
 
 	return helper.Success(ctx, "LoggedIn student profile fetched successfully", dto.ToStudentResponseDTO(student))
+}
+
+func (c *StudentController) FetchPaidStudents(ctx fiber.Ctx) error {
+	userID, ok := ctx.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(ctx, 401, "Invalid user")
+	}
+
+	month := strings.TrimSpace(ctx.Query("month"))
+	if month == "" {
+		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
+	}
+
+	is_inst_admin := c.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := c.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin {
+		if loginnedUserInstitutionID == 0 {
+			return helper.Error(ctx, 403, "Cant able to access other institution")
+		}
+		if instParam := ctx.Query("institution_id"); instParam != "" {
+			if id, err := strconv.ParseUint(instParam, 10, 32); err == nil && uint(id) != loginnedUserInstitutionID {
+				return helper.Error(ctx, 403, "Cant able to access other institution")
+			}
+		}
+	}
+
+	students, err := c.studentService.FetchPaidStudentsService(userID, month)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cant able to access") || strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(ctx, 403, "Cant able to access other institution")
+		}
+		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
+	}
+
+	return helper.Success(ctx, "Paid students fetched successfully", dto.ToStudentResponseListDTO(students))
+}
+
+func (c *StudentController) FetchNotPaidStudents(ctx fiber.Ctx) error {
+	userID, ok := ctx.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(ctx, 401, "Invalid user")
+	}
+
+	month := strings.TrimSpace(ctx.Query("month"))
+	if month == "" {
+		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
+	}
+
+	is_inst_admin := c.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := c.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin {
+		if loginnedUserInstitutionID == 0 {
+			return helper.Error(ctx, 403, "Cant able to access other institution")
+		}
+		if instParam := ctx.Query("institution_id"); instParam != "" {
+			if id, err := strconv.ParseUint(instParam, 10, 32); err == nil && uint(id) != loginnedUserInstitutionID {
+				return helper.Error(ctx, 403, "Cant able to access other institution")
+			}
+		}
+	}
+
+	students, err := c.studentService.FetchNotPaidStudentsService(userID, month)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cant able to access") || strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(ctx, 403, "Cant able to access other institution")
+		}
+		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
+	}
+
+	return helper.Success(ctx, "Not paid students fetched successfully", dto.ToStudentResponseListDTO(students))
+}
+
+func (c *StudentController) FetchAllStudentsByMonth(ctx fiber.Ctx) error {
+	userID, ok := ctx.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(ctx, 401, "Invalid user")
+	}
+
+	month := strings.TrimSpace(ctx.Query("month"))
+	if month == "" {
+		return helper.Error(ctx, fiber.StatusBadRequest, "month query parameter is required")
+	}
+
+	var reqInstID uint
+	is_inst_admin := c.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := c.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin {
+		if loginnedUserInstitutionID == 0 {
+			return helper.Error(ctx, 403, "Cant able to access other institution")
+		}
+		if instParam := ctx.Query("institution_id"); instParam != "" {
+			if id, err := strconv.ParseUint(instParam, 10, 32); err == nil && uint(id) != loginnedUserInstitutionID {
+				return helper.Error(ctx, 403, "Cant able to access other institution")
+			}
+		}
+		reqInstID = loginnedUserInstitutionID
+	} else {
+		if instParam := ctx.Query("institution_id"); instParam != "" {
+			if id, err := strconv.ParseUint(instParam, 10, 32); err == nil {
+				reqInstID = uint(id)
+			}
+		}
+	}
+
+	overview, err := c.studentService.FetchAllStudentsMonthOverviewService(userID, reqInstID, month)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cant able to access") || strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(ctx, 403, "Cant able to access other institution")
+		}
+		return helper.Error(ctx, fiber.StatusInternalServerError, err.Error())
+	}
+
+	return helper.Success(ctx, "Monthly students overview fetched successfully", overview)
 }

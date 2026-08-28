@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
 
 	"gorm.io/gorm"
@@ -33,6 +34,11 @@ func (r *StudentRepository) CreateStudent(
 
 	now := time.Now()
 
+	var userIDVal interface{} = nil
+	if student.UserID > 0 {
+		userIDVal = student.UserID
+	}
+
 	res, err := db.Exec(
 		`INSERT INTO students
 			(name, gender, faculty_id, user_id, created_at, updated_at, is_active)
@@ -41,21 +47,21 @@ func (r *StudentRepository) CreateStudent(
 		WHERE id = ?
 		  AND deleted_at IS NULL
 		  AND is_active = true
-		  AND NOT EXISTS (
+		  AND (? IS NULL OR NOT EXISTS (
 			  SELECT 1
 			  FROM students
 			  WHERE user_id = ?
-			    AND user_id > 0
 			    AND deleted_at IS NULL
-		  )`,
+		  ))`,
 		student.Name,
 		student.Gender,
-		student.UserID,
+		userIDVal,
 		now,
 		now,
 		true,
 		student.FacultyID,
-		student.UserID,
+		userIDVal,
+		userIDVal,
 	)
 
 	if err != nil {
@@ -68,9 +74,7 @@ func (r *StudentRepository) CreateStudent(
 	}
 
 	if rows == 0 {
-		return errors.New(
-			"student profile already exists for this user, or assigned faculty is inactive/invalid",
-		)
+		return errors.New("student profile already exists for this user, or parent faculty is inactive/invalid")
 	}
 
 	id, err := res.LastInsertId()
@@ -164,11 +168,9 @@ func (r *StudentRepository) FetchStudentPaginated(
 		query = query.Where(`
 			(
 				students.name LIKE ?
-				OR students.email LIKE ?
 				OR students.gender LIKE ?
 			)
 		`,
-			searchPattern,
 			searchPattern,
 			searchPattern,
 		)
@@ -217,6 +219,22 @@ func (r *StudentRepository) FetchStudentById(
 	return student, nil
 }
 
+func(r *StudentRepository)GetInstitutionIDForUserRepo(studentID uint)uint{
+	var students_institution_id uint
+	err := r.db.Raw(`
+		SELECT d.institution_id
+		FROM students s
+		JOIN faculties f ON f.id = s.faculty_id
+		JOIN departments d ON d.id = f.department_id
+		WHERE s.id = ?
+	`, studentID).Scan(&students_institution_id).Error
+
+	if err != nil {
+		return 0
+	}
+
+	return students_institution_id
+}
 
 
 func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
@@ -386,10 +404,10 @@ func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, facultyID uint
 		Joins("JOIN departments d ON d.id = f.department_id").
 		Joins("JOIN fees ON fees.student_id = students.id").
 		Joins("JOIN payments ON payments.fee_id = fees.id").
-		Where("students.deleted_at IS NULL AND payments.deleted_at IS NULL AND payments.amount_paid > 0")
+		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL AND fees.deleted_at IS NULL AND payments.deleted_at IS NULL AND payments.amount_paid > 0")
 
 	if strings.TrimSpace(month) != "" {
-		dbQuery = dbQuery.Where("LOWER(payments.month) = LOWER(?)", strings.TrimSpace(month))
+		dbQuery = dbQuery.Where("LOWER(TRIM(payments.month)) = LOWER(TRIM(?))", strings.TrimSpace(month))
 	}
 
 	if facultyID > 0 {
@@ -424,12 +442,24 @@ func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, facultyID u
 	dbQuery := r.db.Model(&model.Student{}).
 		Joins("JOIN faculties f ON f.id = students.faculty_id").
 		Joins("JOIN departments d ON d.id = f.department_id").
-		Where("students.deleted_at IS NULL")
+		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
 
 	if m != "" {
-		dbQuery = dbQuery.Where("students.id NOT IN (SELECT f.student_id FROM fees f JOIN payments p ON p.fee_id = f.id WHERE LOWER(p.month) = LOWER(?) AND p.deleted_at IS NULL AND p.amount_paid > 0)", m)
+		dbQuery = dbQuery.Where(`students.id NOT IN (
+			SELECT fe.student_id 
+			FROM fees fe 
+			JOIN payments p ON p.fee_id = fe.id 
+			WHERE LOWER(TRIM(p.month)) = LOWER(TRIM(?)) 
+			  AND p.deleted_at IS NULL 
+			  AND fe.deleted_at IS NULL 
+			  AND p.amount_paid > 0
+		)`, m)
 	} else {
-		dbQuery = dbQuery.Where("students.id NOT IN (SELECT student_id FROM fees WHERE total_amount = total_paid)")
+		dbQuery = dbQuery.Where(`students.id NOT IN (
+			SELECT student_id 
+			FROM fees 
+			WHERE deleted_at IS NULL AND total_amount <= total_paid
+		)`)
 	}
 
 	if facultyID > 0 {
@@ -450,6 +480,161 @@ func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, facultyID u
 	}
 
 	return students, nil
+}
+
+func (r *StudentRepository) FetchAllStudentsMonthOverview(instID uint, facultyID uint, month string) (dto.MonthlyStudentsOverviewDTO, error) {
+	m := strings.TrimSpace(month)
+
+	dbQuery := r.db.Model(&model.Student{}).
+		Joins("JOIN faculties f ON f.id = students.faculty_id").
+		Joins("JOIN departments d ON d.id = f.department_id").
+		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
+
+	if facultyID > 0 {
+		dbQuery = dbQuery.Where("students.faculty_id = ?", facultyID)
+	} else if instID > 0 {
+		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
+	}
+
+	var students []model.Student
+	err := dbQuery.
+		Preload("Faculty").
+		Preload("Fees").
+		Preload("Fees.Payments").
+		Distinct().
+		Find(&students).Error
+	if err != nil {
+		return dto.MonthlyStudentsOverviewDTO{}, err
+	}
+
+	overview := dto.MonthlyStudentsOverviewDTO{
+		Month:         m,
+		InstitutionID: instID,
+		TotalStudents: len(students),
+		Students:      make([]dto.StudentMonthlyStatusDTO, 0, len(students)),
+	}
+
+	for _, s := range students {
+		item := dto.StudentMonthlyStatusDTO{
+			StudentID:     s.ID,
+			StudentName:   s.Name,
+			Gender:        s.Gender,
+			FacultyID:     s.FacultyID,
+			InstitutionID: instID,
+			Month:         m,
+			IsPaid:        false,
+			AmountPaid:    0,
+		}
+
+		if s.Faculty.ID > 0 {
+			item.FacultyName = s.Faculty.Name
+			item.DepartmentID = s.Faculty.DepartmentID
+		}
+
+		var totalFee, pendingFee float64
+		for _, fee := range s.Fees {
+			if fee.DeletedAt.Valid {
+				continue
+			}
+			totalFee += fee.TotalAmount
+			pendingFee += fee.PendingAmount
+
+			for _, p := range fee.Payments {
+				if p.DeletedAt.Valid {
+					continue
+				}
+				if m != "" && strings.EqualFold(strings.TrimSpace(p.Month), m) && p.AmountPaid > 0 {
+					item.IsPaid = true
+					item.AmountPaid += p.AmountPaid
+					if item.PaymentMode == "" {
+						item.PaymentMode = p.PaymentMode
+					}
+				}
+			}
+		}
+
+		item.TotalFee = totalFee
+		item.PendingFee = pendingFee
+
+		if item.IsPaid {
+			overview.PaidStudentsCount++
+		} else {
+			overview.UnpaidStudentsCount++
+		}
+
+		overview.Students = append(overview.Students, item)
+	}
+
+	return overview, nil
+}
+
+func (r *StudentRepository) FetchStudentByInstitution(instID uint) ([]model.Student, error) {
+	var students []model.Student
+
+	dbQuery := r.db.Model(&model.Student{}).
+		Joins("JOIN faculties f ON f.id = students.faculty_id").
+		Joins("JOIN departments d ON d.id = f.department_id").
+		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
+
+	if instID > 0 {
+		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
+	}
+
+	err := dbQuery.
+		Preload("Faculty").
+		Preload("Fees").
+		Preload("Fees.Payments").
+		Distinct().
+		Find(&students).Error
+
+	return students, err
+}
+
+func (r *StudentRepository) FetchStudentPaginatedWithInstitution(
+	search string,
+	page int,
+	limit int,
+	instID uint,
+) ([]model.Student, int64, error) {
+	var (
+		students []model.Student
+		total    int64
+	)
+
+	query := r.db.
+		Model(&model.Student{}).
+		Joins("JOIN faculties f ON f.id = students.faculty_id").
+		Joins("JOIN departments d ON d.id = f.department_id").
+		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
+
+	if instID > 0 {
+		query = query.Where("d.institution_id = ?", instID)
+	}
+
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where(`(students.name LIKE ? OR students.gender LIKE ?)`, searchPattern, searchPattern)
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+
+	err := query.
+		Preload("Faculty").
+		Preload("Fees").
+		Preload("Fees.Payments").
+		Limit(limit).
+		Offset(offset).
+		Find(&students).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return students, total, nil
 }
 
 

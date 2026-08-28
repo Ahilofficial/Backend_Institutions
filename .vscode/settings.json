@@ -1,4 +1,40 @@
 {
+  "go.useLanguageServer": true,
+  "go.alternateTools": {
+    "gopls": "/home/ahil/go/bin/gopls"
+  },
+  "go.toolsGopath": "/home/ahil/go",
+  "go.gopath": "/home/ahil/go",
+  "gopls": {
+    "ui.completion.usePlaceholders": true,
+    "ui.semanticTokens": true,
+    "ui.diagnostic.analyses": {
+      "unusedparams": true,
+      "shadow": true
+    },
+    "ui.codelenses": {
+      "gc_details": false,
+      "generate": true,
+      "regenerate_cgo": true,
+      "test": true,
+      "tidy": true,
+      "upgrade_dependency": true,
+      "vendor": true
+    }
+  },
+  "go.formatTool": "gofmt",
+  "go.lintOnSave": "package",
+  "go.vetOnSave": "package",
+  "go.buildOnSave": "package",
+  "editor.suggestSelection": "first",
+  "editor.quickSuggestions": {
+    "other": "on",
+    "comments": "off",
+    "strings": "on"
+  },
+  "editor.suggest.snippetsPreventQuickSuggestions": false,
+  "editor.acceptSuggestionOnCommitCharacter": true,
+  "editor.acceptSuggestionOnEnter": "on",
   "files.watcherExclude": {
     "**/.git/objects/**": true,
     "**/node_modules/**": true,

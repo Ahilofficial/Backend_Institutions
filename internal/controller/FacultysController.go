@@ -7,48 +7,84 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
 
 type FacultyController struct {
 	facultyService *services.FacultyService
+	userService    *services.UserService
+	instituteService services.InstituteService
 }
 
-func NewFacultyController(facultyService *services.FacultyService) *FacultyController {
-	return &FacultyController{facultyService: facultyService}
+func NewFacultyController(
+	facultyService *services.FacultyService,
+	userService *services.UserService,
+	instituteService *services.InstituteService,
+) *FacultyController {
+	return &FacultyController{
+		facultyService: facultyService,
+		userService:    userService,
+		instituteService: *instituteService,
+	}
 }
 
 func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(uint)
 
-	var faculty model.Faculty
-
-	if err := c.Bind().Body(&faculty); err != nil {
-		return helper.Error(c, 400, "invalid request body: "+err.Error())
+	
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "user not authenticated")
 	}
 
-	if faculty.Name == "" {
-		return helper.Error(c, 400, "name is required")
+	
+	var body dto.CreateFacultyDTO
+
+	if err := c.Bind().Body(&body); err != nil {
+		return helper.Error(
+			c,
+			400,
+			"invalid request body: "+err.Error(),
+		)
 	}
 
-	if faculty.DepartmentID == 0 {
-		return helper.Error(c, 400, "department_id is required")
+	// Sanitize input.
+	body.Sanitize()
+
+	// Validate input.
+	if err := body.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
 	}
 
-	faculty.UserID = userID
+	user, err := cl.userService.GetUserByID(userID)
+	if err != nil || user == nil {
+		return helper.Error(c, 404, "user not found")
+	}
+
+	var targetUserID uint
+	if user.FacultyID == 0 {
+		targetUserID = userID
+	}
 
 	createdFaculty, err := cl.facultyService.CreateFacultyService(
 		userID,
-		&faculty,
+		&model.Faculty{
+			Name:         body.Name,
+			Gender:       body.Gender,
+			JoiningDate:  body.JoiningDate,
+			DepartmentID: body.DepartmentID,
+			UserID:       targetUserID,
+			IsActive:     true,
+		},
 	)
+
 	if err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
 		return helper.Error(c, 400, err.Error())
+	}
+
+	if targetUserID != 0 {
+		_ = cl.userService.UpdateFacultyID(targetUserID, createdFaculty.ID)
 	}
 
 	return helper.Success(
@@ -57,7 +93,6 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 		dto.ToFacultyResponseDTO(&createdFaculty),
 	)
 }
-
 func (cl *FacultyController) GetAllFacultiesController(c fiber.Ctx) error {
 	search := c.Query("search")
 	pageStr := c.Query("page")
@@ -98,12 +133,12 @@ func (cl *FacultyController) GetAllFacultiesController(c fiber.Ctx) error {
 }
 
 func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
-
 	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	if !ok || userID == 0 {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
+	// Get faculty ID from URL
 	idStr := c.Params("id")
 
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -111,14 +146,23 @@ func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid faculty ID")
 	}
 
+	facultyID := uint(id)
+	
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
+
+	// Fetch faculty
 	faculty, err := cl.facultyService.GetFacultyServiceById(
 		userID,
-		uint(id),
+		facultyID,
 	)
 	if err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 404, err.Error())
@@ -187,75 +231,58 @@ func (cl *FacultyController) GetActiveFacultyController(c fiber.Ctx) error {
 	)
 }
 
-func (cl *FacultyController) GetInactiveFacultyController(c fiber.Ctx) error {
-	faculty, err := cl.facultyService.GetInactiveFacultyService()
-	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
-
-	return helper.Success(
-		c,
-		"Inactive faculty fetched successfully",
-		dto.ToFacultyResponseDTO(&faculty),
-	)
-}
-
 func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 
+	// Logged-in user ID
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
+	// Faculty ID to update
 	idParam := c.Params("id")
 
 	id, err := strconv.ParseUint(idParam, 10, 32)
 	if err != nil {
-		return helper.Error(c, 400, "invalid id")
+		return helper.Error(c, 400, "Invalid faculty ID")
 	}
 
+	// Check logged-in user's role
+	allowed, err := cl.userService.CheckUserRole(userID, "faculty")
+	if err != nil {
+		return helper.Error(c, 500, "Failed to check user role")
+	}
+
+	if !allowed {
+		return helper.Error(c, 403, "You are not authorized to update faculty")
+	}
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(uint(id))
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
+	// Request body
 	var body dto.UpdateFacultyDTO
 
 	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid request body")
+		return helper.Error(c, 400, "Invalid request body")
 	}
 
-	body.Sanitize()
-
-	if err := body.Validate(); err != nil {
-		return helper.Error(c, 400, err.Error())
-	}
-
-	if err := cl.facultyService.UpdateFacultyService(
+	// Update faculty
+	err = cl.facultyService.UpdateFacultyService(
 		userID,
 		uint(id),
 		&body,
-	); err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
-		return helper.Error(c, 400, err.Error())
-	}
-
-	updated, err := cl.facultyService.GetFacultyServiceById(
-		userID,
-		uint(id),
 	)
 	if err != nil {
-
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
 		return helper.Error(c, 500, err.Error())
 	}
 
 	return helper.Success(
 		c,
 		"Faculty updated successfully",
-		dto.ToFacultyResponseDTO(updated),
+		nil,
 	)
 }
 
@@ -272,14 +299,20 @@ func (cl *FacultyController) DeleteFacultyController(c fiber.Ctx) error {
 	if err != nil {
 		return helper.Error(c, 400, "invalid faculty id")
 	}
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(uint(id))
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
 
 	if err := cl.facultyService.DeleteFacultyService(
 		userID,
 		uint(id),
 	); err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 400, err.Error())

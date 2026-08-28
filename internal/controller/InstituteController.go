@@ -7,6 +7,7 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -20,16 +21,22 @@ func NewInstituteController(instituteService *services.InstituteService) *Instit
 }
 
 func (cl *InstituteController) CreateInstituteController(c fiber.Ctx) error {
-	var institute model.Institutions
-	if err := c.Bind().Body(&institute); err != nil {
+	var body dto.CreateInstitutionDTO
+	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
-	if institute.Name == "" {
-		return helper.Error(c, 400, "name is required")
+	body.Sanitize()
+
+	if err := body.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
 	}
-	if institute.InstitutionCode == "" {
-		return helper.Error(c, 400, "institution_code is required")
+
+	institute := model.Institutions{
+		Name:            body.Name,
+		InstitutionCode: body.InstitutionCode,
+		State:           body.State,
+		IsActive:        true,
 	}
 
 	createdInstitute, err := cl.instituteService.CreateInsituteService(&institute)
@@ -45,6 +52,8 @@ func (cl *InstituteController) CreateInstituteController(c fiber.Ctx) error {
 }
 
 func (cl *InstituteController) GetAllInstitutesController(c fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(uint)
+
 	search := c.Query("search")
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
@@ -64,7 +73,7 @@ func (cl *InstituteController) GetAllInstitutesController(c fiber.Ctx) error {
 		}
 	}
 
-	institutes, total, err := cl.instituteService.GetInstituteServicePaginated(search, page, limit)
+	institutes, total, err := cl.instituteService.GetInstituteServicePaginated(userID, search, page, limit)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -89,17 +98,22 @@ func (cl *InstituteController) GetInstituteByIDController(c fiber.Ctx) error {
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
-
+    
 	idstr := c.Params("id")
 	id, err := strconv.ParseUint(idstr, 10, 32)
+	
 	if err != nil {
 		return helper.Error(c, 400, "Invalid institute ID")
 	}
-
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (checking_user_institution_id == 0 || checking_user_institution_id != uint(id)) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
 	institute, err := cl.instituteService.GetInstituteServiceById(userID, uint(id))
 	if err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 		return helper.Error(c, 404, err.Error())
 	}
@@ -157,12 +171,16 @@ func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
 	}
 
 	idParam := c.Params("id")
-
+	
 	id, err := strconv.ParseUint(idParam, 10, 32)
 	if err != nil {
 		return helper.Error(c, 400, "invalid id")
 	}
-
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (checking_user_institution_id == 0 || checking_user_institution_id != uint(id)) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
 	var body dto.UpdateInstitutionDTO
 	body.Sanitize()
 
@@ -179,16 +197,16 @@ func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
 		uint(id),
 		&body,
 	); err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 		return helper.Error(c, 400, err.Error())
 	}
 
 	updated, err := cl.instituteService.GetInstituteServiceById(userID, uint(id))
 	if err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 		return helper.Error(c, 500, err.Error())
 	}
@@ -207,15 +225,19 @@ func (cl *InstituteController) DeleteInstituteController(c fiber.Ctx) error {
 	}
 
 	idStr := c.Params("id")
-
 	id, err := strconv.ParseUint(idStr, 10, 32)
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (checking_user_institution_id == 0 || checking_user_institution_id != uint(id)) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
 	if err != nil {
 		return helper.Error(c, 400, "invalid institute id")
 	}
 
 	if err := cl.instituteService.DeleteInstitutionService(userID, uint(id)); err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 		return helper.Error(c, 400, err.Error())
 	}
@@ -228,7 +250,9 @@ func (cl *InstituteController) DeleteInstituteController(c fiber.Ctx) error {
 }
 
 func (cl *InstituteController) FetchAllInstitutesController(c fiber.Ctx) error {
-	institutes, err := cl.instituteService.GetInstituteService()
+	userID, _ := c.Locals("user_id").(uint)
+
+	institutes, err := cl.instituteService.GetInstituteService(userID)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}

@@ -116,6 +116,7 @@ func (cl *RoleController) AssignPermissionsController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
@@ -259,6 +260,7 @@ func (cl *RoleController) CreateUserRoleController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
@@ -303,6 +305,7 @@ func (cl *RoleController) UpdateUserRoleController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
@@ -361,6 +364,7 @@ func (cl *RoleController) CreateRolePermissionController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
@@ -405,6 +409,7 @@ func (cl *RoleController) UpdateRolePermissionController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}

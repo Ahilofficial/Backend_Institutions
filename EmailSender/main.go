@@ -14,9 +14,12 @@ import (
 )
 
 func main() {
-	err := godotenv.Load("../.env")
+	err := godotenv.Load()
 	if err != nil {
-		fmt.Println("Cant able to load the envirornment variable")
+		err = godotenv.Load("../.env")
+		if err != nil {
+			fmt.Println("Cant able to load the envirornment variable")
+		}
 	}
 
 	notificationService, err := wire.InitializeNotificationService()

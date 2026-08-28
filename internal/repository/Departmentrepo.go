@@ -236,3 +236,12 @@ func (r *DepartmentRepository) GetInstitutionByDepartmentID(
 
 	return institutionID, nil
 }
+
+func (r *DepartmentRepository) GetInstitutionIDForUserRepo(id uint) uint {
+	var institutionID uint
+	err := r.db.Raw("SELECT institution_id FROM departments WHERE id = ? AND deleted_at IS NULL LIMIT 1", id).Scan(&institutionID).Error
+	if err != nil {
+		return 0
+	}
+	return institutionID
+}

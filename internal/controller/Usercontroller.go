@@ -3,7 +3,7 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
-	"backend_institutions/internal/model"
+	// "backend_institutions/internal/model"
 	"backend_institutions/internal/services"
 	"fmt"
 	"strconv"
@@ -21,42 +21,50 @@ func NewUserController(userService *services.UserService) *UserController {
 }
 
 func (cl *UserController) SignUpController(c fiber.Ctx) error {
-	role := strings.TrimSpace(c.Params("role"))
-	if role == "" {
-		role = strings.TrimSpace(c.Query("role"))
-	}
-	role = strings.ReplaceAll(role, "-", " ")
+	// Get role from URL parameter (e.g. /signup/faculty, /signup/student, /signup/institution_admin)
+	targetRole := strings.TrimSpace(c.Params("role"))
+	targetRole = strings.ReplaceAll(targetRole, "-", " ")
+	targetRole = strings.ReplaceAll(targetRole, "_", " ")
+
 
 	var body dto.SignUpDTO
-	body.Sanitize()
-
 	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid request body: "+err.Error())
+		return helper.Error(
+			c,
+			400,
+			"invalid request body: "+err.Error(),
+		)
 	}
 
+	
+	body.Sanitize()
+
+	
+	if targetRole == "" && body.Role != "" {
+		targetRole = body.Role
+	}
+
+	// Validate request body
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	var user model.User
-	var err error
-
-	if role != "" {
-		user, err = cl.userService.SignUpWithRole(&body, role)
-	} else {
-		user, err = cl.userService.SignUp(&body)
-	}
-
+	// Create new user with the role from URL
+	user, err := cl.userService.SignUpWithRole(&body, targetRole)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	msg := "Signed up successfully"
-	if role != "" {
-		msg = fmt.Sprintf("Signed up successfully as %s", role)
+	msg := "Signed up successfully. Please verify your email."
+	if targetRole != "" {
+		msg = fmt.Sprintf("Signed up successfully as %s. Please verify your email.", targetRole)
 	}
 
-	return helper.Success(c, msg, dto.ToUserResponseDTO(&user))
+	return helper.Success(
+		c,
+		msg,
+		dto.ToUserResponseDTO(&user),
+	)
 }
 
 func (cl *UserController) SignInController(c fiber.Ctx) error {
@@ -75,6 +83,7 @@ func (cl *UserController) SignInController(c fiber.Ctx) error {
 	if err != nil {
 		return helper.Error(c, 401, err.Error())
 	}
+
 
 	return helper.Success(c, "Signed in successfully", dto.AuthResponseDTO{
 		UserID:       user_id,
@@ -136,32 +145,38 @@ func (cl *UserController) DeleteUserController(c fiber.Ctx) error {
 
 func (cl *UserController) ForgotPassword(c fiber.Ctx) error {
 	var forgotpassword dto.ForgotPasswordDTO
-	err := c.Bind().Body(&forgotpassword)
-	if err != nil {
-		return helper.Error(c, 400, "Invalid email format")
+	if err := c.Bind().Body(&forgotpassword); err != nil {
+		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
-	_, err = cl.userService.ForgotPasswordService(forgotpassword)
 
+	forgotpassword.Sanitize()
+	if err := forgotpassword.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
+	_, err := cl.userService.ForgotPasswordService(forgotpassword)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	return c.SendString("Sended the forgot password link just check it")
+	return helper.Success(c, "Sent the forgot password link successfully", nil)
 }
 
 func (cl *UserController) ResetPassword(c fiber.Ctx) error {
-	token := c.Query("token")
+	token := strings.TrimSpace(c.Query("token"))
 	if token == "" {
-		return helper.Error(c, 400, "Token is required")
+		return helper.Error(c, 400, "token is required")
 	}
 
 	var reset dto.ResetPassword
 	if err := c.Bind().Body(&reset); err != nil {
-		return helper.Error(c, 400, "Invalid payload format")
+		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
-	fmt.Println("Token:", token)
-	fmt.Println("Reset Body:", reset)
+	reset.Sanitize()
+	if err := reset.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
 
 	err := cl.userService.ResetPasswordService(token, reset)
 	if err != nil {
@@ -181,6 +196,11 @@ func (cl *UserController) Logout(c fiber.Ctx) error {
 		}
 	}
 
+	body.Sanitize()
+	if err := body.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
 	_ = cl.userService.Logout(&body)
 	return helper.Success(c, "Logout successful", nil)
 }
@@ -189,14 +209,20 @@ func (c *UserController) ResendMail(ctx fiber.Ctx) error {
 	var body dto.ResendMailSignUp
 
 	if err := ctx.Bind().Body(&body); err != nil {
+		return helper.Error(ctx, 400, "invalid request body: "+err.Error())
+	}
+
+	body.Sanitize()
+	if err := body.Validate(); err != nil {
 		return helper.Error(ctx, 400, err.Error())
 	}
+
 	err := c.userService.ResendMail(body.Email)
 	if err != nil {
 		return helper.Error(ctx, 400, err.Error())
 	}
 
-	return helper.Success(ctx, "mail sent successfully", nil)
+	return helper.Success(ctx, "Verification email sent successfully", nil)
 }
 
 func (cl *UserController) GetProfile(c fiber.Ctx) error {

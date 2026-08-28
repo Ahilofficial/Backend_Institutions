@@ -16,10 +16,10 @@ func Connect() {
 	if dbUser == "" {
 		dbUser = "root"
 	}
-	dbPassword := os.Getenv("DB_PASSWORD")
-	if dbPassword == "" {
-		dbPassword = "pass"
-	}
+	// dbPassword := os.Getenv("DB_PASSWORD")
+	// if dbPassword == "" {
+	// 	dbPassword = "pass"
+	// }
 	dbHost := os.Getenv("DB_HOST")
 	if dbHost == "" {
 		dbHost = "127.0.0.1"
@@ -33,15 +33,11 @@ func Connect() {
 		dbName = "institution"
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbPassword, dbHost, dbPort, dbName)
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
-	})
+	dsn := fmt.Sprintf("%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbHost, dbPort, dbName)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatal("cant connect to the database")
 	}
-
-	_ = db.Exec("SET FOREIGN_KEY_CHECKS = 0").Error
 
 	DB = db
 	log.Print("Connected to the database successfully")

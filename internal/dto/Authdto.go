@@ -26,6 +26,7 @@ type SignUpDTO struct {
 	Email    string `json:"email"`
 	Phone    string `json:"phone"`
 	Password string `json:"password"`
+	Role     string `json:"role,omitempty"`
 }
 
 type SignInDTO struct {
@@ -48,6 +49,7 @@ type AuthResponseDTO struct {
 	UserID       uint   `json:"user_id"`
 	SessionID    string `json:"session_id"`
 	Role         string `json:"role,omitempty"`
+	
 }
 
 type AssignRoleDTO struct {
@@ -56,11 +58,15 @@ type AssignRoleDTO struct {
 }
 
 type UserResponseDTO struct {
-	ID       uint   `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	IsActive bool   `json:"isactive"`
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	IsActive    bool   `json:"isactive"`
+	Role        string `json:"role,omitempty"`
+	StudentID   uint   `json:"student_id,omitempty"`
+	FacultyID   uint   `json:"faculty_id,omitempty"`
+	PrincipalID uint   `json:"principal_id,omitempty"`
 }
 
 var (
@@ -72,6 +78,7 @@ func (dto *SignUpDTO) Sanitize() {
 	dto.Name = strings.TrimSpace(dto.Name)
 	dto.Email = strings.TrimSpace(strings.ToLower(dto.Email))
 	dto.Phone = strings.TrimSpace(dto.Phone)
+	dto.Role = strings.TrimSpace(strings.ToLower(dto.Role))
 }
 
 func (dto *SignUpDTO) Validate() error {
@@ -117,9 +124,86 @@ func (dto *AssignRoleDTO) Validate() error {
 	return nil
 }
 
+func (dto *ForgotPasswordDTO) Sanitize() {
+	dto.Email = strings.TrimSpace(strings.ToLower(dto.Email))
+}
+
+func (dto *ForgotPasswordDTO) Validate() error {
+	if dto.Email == "" {
+		return errors.New("email is required")
+	}
+	if !emailRegex.MatchString(dto.Email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
+func (dto *ResetPassword) Sanitize() {
+	dto.CurrentPassword = strings.TrimSpace(dto.CurrentPassword)
+	dto.NewPassword = strings.TrimSpace(dto.NewPassword)
+}
+
+func (dto *ResetPassword) Validate() error {
+	if dto.CurrentPassword == "" {
+		return errors.New("current password is required")
+	}
+	if dto.NewPassword == "" {
+		return errors.New("new password is required")
+	}
+	if len(dto.NewPassword) < 6 {
+		return errors.New("new password must be at least 6 characters long")
+	}
+	return nil
+}
+
+func (dto *ResendResetPassword) Sanitize() {
+	dto.ResetToken = strings.TrimSpace(dto.ResetToken)
+}
+
+func (dto *ResendResetPassword) Validate() error {
+	if dto.ResetToken == "" {
+		return errors.New("reset token is required")
+	}
+	return nil
+}
+
+func (dto *LogoutDTO) Sanitize() {
+	dto.Token = strings.TrimSpace(dto.Token)
+}
+
+func (dto *LogoutDTO) Validate() error {
+	if dto.UserID == 0 {
+		return errors.New("user_id is required")
+	}
+	return nil
+}
+
+func (dto *ResendMailSignUp) Sanitize() {
+	dto.Email = strings.TrimSpace(strings.ToLower(dto.Email))
+}
+
+func (dto *ResendMailSignUp) Validate() error {
+	if dto.Email == "" {
+		return errors.New("email is required")
+	}
+	if !emailRegex.MatchString(dto.Email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
 func ToUserResponseDTO(user *model.User) UserResponseDTO {
 	var dto UserResponseDTO
 	copier.Copy(&dto, user)
+
+	dto.StudentID = user.StudentID
+	dto.FacultyID = user.FacultyID
+	dto.PrincipalID = user.PrincipalID
+
+	if len(user.Roles) > 0 {
+		dto.Role = user.Roles[0].Name
+	}
+
 	return dto
 }
 

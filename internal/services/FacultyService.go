@@ -42,37 +42,35 @@ func (s *FacultyService) checkInstitutionAccess(
 }
 
 func (s *FacultyService) CreateFacultyService(userID uint, faculty *model.Faculty) (model.Faculty, error) {
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		faculty.DepartmentID,
-	)
-	if err != nil {
-		return model.Faculty{}, err
+	department, err := s.departmentRepo.FetchDepartmentById(faculty.DepartmentID)
+	if err != nil || department.ID == 0 {
+		return model.Faculty{}, errors.New("department not found")
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return model.Faculty{}, err
+	targetUserID := userID
+	if faculty.UserID > 0 {
+		targetUserID = faculty.UserID
 	}
 
-	if err := s.userRepo.ValidateUser(faculty.UserID); err != nil {
-		return model.Faculty{}, err
+	if targetUserID > 0 {
+		if err := s.userRepo.ValidateUser(targetUserID); err != nil {
+			return model.Faculty{}, err
+		}
+
+		existingType, err := s.userRepo.CheckUserExistingProfile(targetUserID)
+		if err == nil && existingType != "" {
+			return model.Faculty{}, errors.New("user is already registered as a " + existingType)
+		}
 	}
 
-	existingType, err := s.userRepo.CheckUserExistingProfile(faculty.UserID)
-	if err == nil && existingType != "" {
-		return model.Faculty{}, errors.New("user is already registered as a " + existingType)
-	}
-
+	faculty.UserID = targetUserID
 	if err := s.facultyRepo.CreateFaculty(faculty); err != nil {
 		return model.Faculty{}, err
 	}
 
 	if faculty.UserID != 0 {
-		if err := s.userRepo.UpdateUserFacultyID(faculty.UserID, faculty.ID); err != nil {
-			return model.Faculty{}, err
-		}
+		_ = s.userRepo.UpdateUserFacultyID(faculty.UserID, faculty.ID)
+		_ = s.userRepo.AssignRoleByName(faculty.UserID, "faculty")
 	}
 
 	return *faculty, nil
@@ -94,42 +92,48 @@ func (s *FacultyService) GetFacultyServicePaginated(
 	)
 }
 
-func (s *FacultyService) GetFacultyServiceById(userID uint, id uint) (*model.Faculty, error) {
-	isSuper, _ := s.userRepo.IsSuperAdmin(userID)
-	instAdminID, _ := s.userRepo.GetUserInstitutionID(userID)
-
-	if !isSuper && instAdminID == 0 {
-		userFacultyID, err := s.userRepo.GetUserFacultyID(userID)
-		if err != nil || userFacultyID == 0 {
-			return nil, errors.New("access denied: faculty profile not created yet")
-		}
-		if userFacultyID != id {
-			return nil, errors.New("access denied: you can only access your own faculty profile")
-		}
-	}
-
+func (s *FacultyService) GetFacultyServiceById(
+	userID uint,
+	id uint,
+) (*model.Faculty, error) {
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return nil, err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		faculty.DepartmentID,
-	)
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		if userFacultyID != id {
+			return nil, errors.New("access denied: you can only access your own faculty profile")
+		}
+		return &faculty, nil
+	}
+
+	// 2. For Super Admin, Institution Admin, or Principal: check institution access
+	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return nil, err
+	if err := s.checkInstitutionAccess(userID, facultyInstitutionID); err != nil {
+		return nil, errors.New("access denied: faculty does not belong to your institution")
 	}
 
 	return &faculty, nil
 }
 
+func (s *FacultyService) GetInstitutionIDForUserRepo(facultyID uint) uint {
+	return s.facultyRepo.GetInstitutionIDForUserRepo(facultyID)
+}
+
+func (s *FacultyService) GetInstitutionByDepartmentID(deptID uint) (uint, error) {
+	return s.departmentRepo.GetInstitutionByDepartmentID(deptID)
+}
+
+func (s *FacultyService) LoginnedUserInstitutionIDService(userID uint) uint {
+	logginedUserInstitutionID := s.facultyRepo.LoginnedUserInstitutionIDRepo(userID)
+	return logginedUserInstitutionID
+}
 func (s *FacultyService) GetLoggedInFacultyProfile(userID uint) (*model.Faculty, error) {
 	facultyID, err := s.userRepo.GetUserFacultyID(userID)
 	if err != nil || facultyID == 0 {
@@ -154,23 +158,23 @@ func (s *FacultyService) DeleteFacultyService(
 	userID uint,
 	id uint,
 ) error {
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		return errors.New("access denied: faculty cannot delete faculty profiles")
+	}
+
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		faculty.DepartmentID,
-	)
+	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
 	if err != nil {
 		return err
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
+	if err := s.checkInstitutionAccess(userID, facultyInstitutionID); err != nil {
+		return errors.New("access denied: faculty does not belong to your institution")
 	}
 
 	return s.facultyRepo.DeleteFaculty(id)
@@ -187,46 +191,31 @@ func (s *FacultyService) GetInactiveFacultyService() (model.Faculty, error) {
 func (s *FacultyService) UpdateFacultyService(
 	userID uint,
 	id uint,
-	dto *dto.UpdateFacultyDTO,
+	req *dto.UpdateFacultyDTO,
 ) error {
-	isSuper, _ := s.userRepo.IsSuperAdmin(userID)
-	instAdminID, _ := s.userRepo.GetUserInstitutionID(userID)
-
-	if !isSuper && instAdminID == 0 {
-		userFacultyID, err := s.userRepo.GetUserFacultyID(userID)
-		if err != nil || userFacultyID == 0 {
-			return errors.New("access denied: faculty profile not created yet")
-		}
-		if userFacultyID != id {
-			return errors.New("access denied: you can only update your own faculty profile")
-		}
-	}
-
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
 	}
 
-	institutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(
-		faculty.DepartmentID,
-	)
-	if err != nil {
-		return err
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		if userFacultyID != id {
+			return errors.New("access denied: you can only update your own faculty profile")
+		}
+	} else {
+		facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
+		if err != nil {
+			return err
+		}
+		if err := s.checkInstitutionAccess(userID, facultyInstitutionID); err != nil {
+			return errors.New("access denied: cannot update this faculty profile")
+		}
 	}
 
-	if err := s.checkInstitutionAccess(
-		userID,
-		institutionID,
-	); err != nil {
-		return err
-	}
-
-	if dto.Name != "" {
-		faculty.Name = dto.Name
-	}
-	if dto.Gender != "" {
-		faculty.Gender = dto.Gender
-	}
-
+	faculty.Name = req.Name
+	faculty.Gender = req.Gender
 	return s.facultyRepo.UpdateFacultyById(&faculty)
 }
+
+

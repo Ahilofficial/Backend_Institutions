@@ -8,16 +8,23 @@ import (
 )
 
 type CreateFeesDTO struct {
-	PaymentMode string  `json:"payment_mode"`
-	TotalAmount float64 `json:"total_amount"`
-	StudentID   uint    `json:"student_id"`
+	PaymentMode              string  `json:"payment_mode"`
+	TotalAmount              float64 `json:"total_amount"`
+	Amount                   float64 `json:"amount"`
+	StudentID                uint    `json:"student_id"`
 }
 
 func (dto *CreateFeesDTO) Sanitize() {
 	dto.PaymentMode = strings.TrimSpace(strings.ToLower(dto.PaymentMode))
+	if dto.TotalAmount == 0 && dto.Amount > 0 {
+		dto.TotalAmount = dto.Amount
+	}
 }
 
 func (dto *CreateFeesDTO) Validate() error {
+	if dto.TotalAmount == 0 && dto.Amount > 0 {
+		dto.TotalAmount = dto.Amount
+	}
 	if dto.PaymentMode == "" {
 		return errors.New("payment mode is required")
 	}
@@ -33,17 +40,23 @@ func (dto *CreateFeesDTO) Validate() error {
 type UpdateFeesDTO struct {
 	PaymentMode string  `json:"payment_mode"`
 	Amount      float64 `json:"amount"`
+	TotalAmount float64 `json:"total_amount"`
 }
 
 func (dto *UpdateFeesDTO) Sanitize() {
 	dto.PaymentMode = strings.TrimSpace(strings.ToLower(dto.PaymentMode))
+	if dto.Amount == 0 && dto.TotalAmount > 0 {
+		dto.Amount = dto.TotalAmount
+	}
 }
 
 func (dto *UpdateFeesDTO) Validate() error {
+	dto.Sanitize()
+
 	if dto.PaymentMode == "" {
 		return errors.New("payment mode is required")
 	}
-	if dto.Amount == 0 {
+	if dto.Amount <= 0 {
 		return errors.New("amount is required and must be greater than 0")
 	}
 	return nil
@@ -86,9 +99,18 @@ type CreatePaymentDTO struct {
 	FeeID       uint    `json:"fee_id"`
 }
 
+func (dto *CreatePaymentDTO) Sanitize() {
+	dto.Month = strings.TrimSpace(dto.Month)
+	dto.PaymentMode = strings.TrimSpace(strings.ToLower(dto.PaymentMode))
+}
+
 func (dto *CreatePaymentDTO) Validate() error {
-	if strings.TrimSpace(dto.Month) == "" {
+	if dto.Month == "" {
 		return errors.New("month is required")
+	}
+
+	if dto.PaymentMode == "" {
+		return errors.New("payment mode is required")
 	}
 
 	if dto.AmountPaid <= 0 {
@@ -100,8 +122,4 @@ func (dto *CreatePaymentDTO) Validate() error {
 	}
 
 	return nil
-}
-
-func (dto *CreatePaymentDTO) Sanitize() {
-	dto.Month = strings.TrimSpace(dto.Month)
 }

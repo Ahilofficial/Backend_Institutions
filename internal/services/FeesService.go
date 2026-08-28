@@ -30,7 +30,7 @@ func (s *FeesService) checkInstitutionAccess(
 	userID uint,
 	institutionID uint,
 ) error {
-	hasAccess, err := s.userRepo.RequireInstitutionAdminAccess(
+	hasAccess, err := s.userRepo.HasInstitutionAccess(
 		userID,
 		institutionID,
 	)
@@ -62,6 +62,11 @@ func (s *FeesService) CreateFeesService(
 	}
 	if !canManage {
 		return model.Fees{}, errors.New("access denied: cant create fee for this student")
+	}
+
+	existingFee, err := s.feesRepo.FetchFeesByStudentID(fee.StudentID)
+	if err == nil && existingFee != nil && existingFee.ID > 0 {
+		return model.Fees{}, errors.New("fee already exists for this student")
 	}
 
 	if err := s.feesRepo.CreateFees(fee); err != nil {
@@ -270,6 +275,11 @@ func (s *FeesService) FetchFeesByStudentID(
 		return nil, errors.New("access denied")
 	}
 
+	// If the user is the student themselves, allow direct access to their fees
+	if err == nil && user.StudentID > 0 && user.StudentID == studentID {
+		return s.feesRepo.FetchFeesByStudentID(studentID)
+	}
+
 	institutionID, err := s.studentRepo.GetInstitutionByStudentID(
 		studentID,
 	)
@@ -282,6 +292,15 @@ func (s *FeesService) FetchFeesByStudentID(
 		institutionID,
 	); err != nil {
 		return nil, err
+	}
+
+	return s.feesRepo.FetchFeesByStudentID(studentID)
+}
+
+func (s *FeesService) GetMyFees(userID uint) (*model.Fees, error) {
+	studentID, err := s.userRepo.GetUserStudentID(userID)
+	if err != nil || studentID == 0 {
+		return nil, errors.New("student profile not created yet for logged in user")
 	}
 
 	return s.feesRepo.FetchFeesByStudentID(studentID)

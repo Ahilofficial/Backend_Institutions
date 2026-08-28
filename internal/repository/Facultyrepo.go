@@ -26,6 +26,11 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 
 	now := time.Now()
 
+	var userIDVal interface{} = nil
+	if faculty.UserID > 0 {
+		userIDVal = faculty.UserID
+	}
+
 	res, err := db.Exec(
 		`INSERT INTO faculties
 			(name, gender, joining_date, department_id, user_id, created_at, updated_at, is_active)
@@ -34,22 +39,22 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 		WHERE id = ?
 		  AND deleted_at IS NULL
 		  AND is_active = true
-		  AND NOT EXISTS (
+		  AND (? IS NULL OR NOT EXISTS (
 			  SELECT 1
 			  FROM faculties
 			  WHERE user_id = ?
-			    AND user_id > 0
 			    AND deleted_at IS NULL
-		  )`,
+		  ))`,
 		faculty.Name,
 		faculty.Gender,
 		faculty.JoiningDate,
-		faculty.UserID,
+		userIDVal,
 		now,
 		now,
 		true,
 		faculty.DepartmentID,
-		faculty.UserID,
+		userIDVal,
+		userIDVal,
 	)
 	if err != nil {
 		return err
@@ -89,6 +94,27 @@ func (r *FacultyRepository) FetchFaculty() ([]model.Faculty, error) {
 	}
 
 	return facs, err
+}
+
+func (r *FacultyRepository) LoginnedUserInstitutionIDRepo(userID uint) uint {
+	var luserinstid uint
+	err := r.db.Raw("SELECT institution_id FROM institution_admins WHERE user_id = ? LIMIT 1", userID).Scan(&luserinstid).Error
+	if err != nil {
+		return 0
+	}
+	return luserinstid
+}
+func (r *FacultyRepository)GetInstitutionIDForUserRepo(FacultyID uint)(uint){
+	var faculty_inst_id uint
+	err:=r.db.Raw(`SELECT d.institution_id
+		FROM faculties f
+		JOIN departments d ON d.id = f.department_id
+		WHERE f.id = ?
+`).Scan(&faculty_inst_id).Error
+	if err != nil {
+		return 0
+	}
+	return faculty_inst_id
 }
 
 func (r *FacultyRepository) FetchFacultyPaginated(search string, page, limit int) ([]model.Faculty, int64, error) {

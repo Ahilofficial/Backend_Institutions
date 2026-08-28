@@ -7,47 +7,75 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
 
 type PrincipalControllers struct {
 	principalService *services.PrincipalService
+	userService *services.UserService
 }
 
-func NewPrincipalControllers(principalService *services.PrincipalService) *PrincipalControllers {
-	return &PrincipalControllers{principalService: principalService}
+func NewPrincipalControllers(principalService *services.PrincipalService, userService *services.UserService) *PrincipalControllers {
+	return &PrincipalControllers{principalService: principalService,
+	userService: userService,
+}
 }
 
 func (cl *PrincipalControllers) CreatePrincipalController(c fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(uint)
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "user not authenticated")
+	}
 
-	var principal model.Principal
+	var body dto.CreatePrincipalDTO
 
-	if err := c.Bind().Body(&principal); err != nil {
+	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
-	if principal.Name == "" {
-		return helper.Error(c, 400, "name is required")
+	body.Sanitize()
+
+	if err := body.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
 	}
 
-	if principal.InstitutionID == 0 {
-		return helper.Error(c, 400, "institution_id is required")
+	// Get the logged-in user.
+	user, err := cl.userService.GetUserByID(userID)
+	if err != nil || user == nil {
+		return helper.Error(c, 404, "user not found")
 	}
 
-	principal.UserID = userID
+	// Check if principal profile already exists.
+	if user.PrincipalID != 0 {
+		return helper.Error(c, 400, "principal profile already exists")
+	}
 
+	principal := model.Principal{
+		Name:          body.Name,
+		Gender:        body.Gender,
+		JoiningDate:   body.JoiningDate,
+		InstitutionID: body.InstitutionID,
+		UserID:        userID,
+		IsActive:      true,
+	}
+
+	// Create principal.
 	createdPrincipal, err := cl.principalService.CreatePrincipalService(
 		userID,
 		&principal,
 	)
 	if err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
 		return helper.Error(c, 400, err.Error())
+	}
+
+	// Store the newly created principal ID in users.principal_id.
+	if err := cl.userService.UpdatePrincipalID(
+		userID,
+		createdPrincipal.ID,
+	); err != nil {
+		return helper.Error(c, 500, "failed to link principal to user")
 	}
 
 	return helper.Success(
@@ -56,7 +84,6 @@ func (cl *PrincipalControllers) CreatePrincipalController(c fiber.Ctx) error {
 		dto.ToPrincipalResponseDTO(&createdPrincipal),
 	)
 }
-
 func (cl *PrincipalControllers) GetAllPrincipalsController(c fiber.Ctx) error {
 	search := c.Query("search")
 	pageStr := c.Query("page")
@@ -114,8 +141,8 @@ func (cl *PrincipalControllers) GetPrincipalByIDController(c fiber.Ctx) error {
 		uint(id),
 	)
 	if err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 404, err.Error())
@@ -169,7 +196,7 @@ func (cl *PrincipalControllers) GetInactivePrincipalController(c fiber.Ctx) erro
 
 func (cl *PrincipalControllers) UpdatePrincipalController(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
+	if !ok || userID == 0 {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
@@ -177,8 +204,10 @@ func (cl *PrincipalControllers) UpdatePrincipalController(c fiber.Ctx) error {
 
 	id, err := strconv.ParseUint(idParam, 10, 32)
 	if err != nil {
-		return helper.Error(c, 400, "invalid id")
+		return helper.Error(c, 400, "invalid principal ID")
 	}
+
+	principalID := uint(id)
 
 	var body dto.UpdatePrincipalDTO
 
@@ -192,25 +221,27 @@ func (cl *PrincipalControllers) UpdatePrincipalController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
+	// Update principal
 	if err := cl.principalService.UpdatePrincipalService(
 		userID,
-		uint(id),
+		principalID,
 		&body,
 	); err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 400, err.Error())
 	}
 
+	// Get updated principal
 	updated, err := cl.principalService.GetPrincipalServiceById(
 		userID,
-		uint(id),
+		principalID,
 	)
 	if err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
 
 		return helper.Error(c, 500, err.Error())
@@ -224,6 +255,7 @@ func (cl *PrincipalControllers) UpdatePrincipalController(c fiber.Ctx) error {
 }
 
 func (cl *PrincipalControllers) DeletePrincipalController(c fiber.Ctx) error {
+
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
@@ -233,17 +265,16 @@ func (cl *PrincipalControllers) DeletePrincipalController(c fiber.Ctx) error {
 
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		return helper.Error(c, 400, "invalid principal id")
+		return helper.Error(c, 400, "Invalid principal ID")
 	}
 
 	if err := cl.principalService.DeletePrincipalService(
 		userID,
 		uint(id),
 	); err != nil {
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+			return helper.Error(c, 403, err.Error())
 		}
-
 		return helper.Error(c, 400, err.Error())
 	}
 
@@ -253,7 +284,6 @@ func (cl *PrincipalControllers) DeletePrincipalController(c fiber.Ctx) error {
 		nil,
 	)
 }
-
 func (cl *PrincipalControllers) FetchAllPrincipalsController(c fiber.Ctx) error {
 	principals, err := cl.principalService.GetPrincipalService()
 	if err != nil {

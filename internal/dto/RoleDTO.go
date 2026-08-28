@@ -79,11 +79,20 @@ func (dto *UpdateRoleDTO) Validate() error {
 	return nil
 }
 
+func (dto *AssignPermissionsDTO) Sanitize() {
+	for i, name := range dto.PermissionNames {
+		dto.PermissionNames[i] = strings.TrimSpace(name)
+	}
+}
+
 func (dto *AssignPermissionsDTO) Validate() error {
 	if len(dto.PermissionIDs) == 0 && len(dto.PermissionNames) == 0 {
 		return errors.New("either permission_ids or permission_names must be provided")
 	}
 	return nil
+}
+
+func (dto *CreateUserRoleDTO) Sanitize() {
 }
 
 func (dto *CreateUserRoleDTO) Validate() error {
@@ -96,11 +105,17 @@ func (dto *CreateUserRoleDTO) Validate() error {
 	return nil
 }
 
+func (dto *UpdateUserRoleDTO) Sanitize() {
+}
+
 func (dto *UpdateUserRoleDTO) Validate() error {
 	if dto.RoleID == 0 {
 		return errors.New("role_id is required")
 	}
 	return nil
+}
+
+func (dto *CreateRolePermissionDTO) Sanitize() {
 }
 
 func (dto *CreateRolePermissionDTO) Validate() error {
@@ -111,6 +126,9 @@ func (dto *CreateRolePermissionDTO) Validate() error {
 		return errors.New("permission_id is required")
 	}
 	return nil
+}
+
+func (dto *UpdateRolePermissionDTO) Sanitize() {
 }
 
 func (dto *UpdateRolePermissionDTO) Validate() error {

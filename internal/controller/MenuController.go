@@ -16,10 +16,13 @@ func NewMenuController(service *services.MenuService) *MenuController {
 		menuService: service,
 	}
 }
-
 func (c *MenuController) GetMenus(ctx fiber.Ctx) error {
-
-	userID := ctx.Locals("user_id").(uint)
+	userID, ok := ctx.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return ctx.Status(401).JSON(fiber.Map{
+			"message": "Unauthorized",
+		})
+	}
 
 	menus, err := c.menuService.GetMenus(userID)
 	if err != nil {

@@ -24,18 +24,10 @@ func (r *UserRepository) IsSuperAdmin(userID uint) (bool, error) {
 	query := `
 		SELECT EXISTS (
 			SELECT 1
-			FROM users u
-			JOIN user_roles ur ON ur.user_id = u.id
+			FROM user_roles ur
 			JOIN roles r ON r.id = ur.role_id
-			LEFT JOIN role_permissions rp ON rp.role_id = r.id
-			LEFT JOIN permissions p ON p.id = rp.permission_id
-			WHERE u.id = ? 
-			  AND (
-				LOWER(r.name) = 'super admin'
-				OR LOWER(r.name) = 'super_admin'
-				OR LOWER(r.name) = 'superadmin'
-				OR p.name = 'ADMIN_PERMISSION'
-			  )
+			WHERE ur.user_id = ? 
+			  AND LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin')
 		)
 	`
 	err := r.db.Raw(query, userID).Scan(&isSuper).Error
@@ -45,14 +37,40 @@ func (r *UserRepository) IsSuperAdmin(userID uint) (bool, error) {
 	return isSuper, nil
 }
 
+func (r *UserRepository) UpdateFacultyID(userID uint, facultyID uint) error {
+	result := r.db.
+		Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("faculty_id", facultyID)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	return nil
+}
+
+func (r *UserRepository) GetUserByID(userID uint) (*model.User, error) {
+	var user model.User
+
+	result := r.db.
+		Where("id = ?", userID).
+		First(&user)
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &user, nil
+}
+
 func (r *UserRepository) HasAnyRoleAssigned(userID uint) (bool, error) {
 	isSuper, err := r.IsSuperAdmin(userID)
 	if err == nil && isSuper {
-		return true, nil
-	}
-
-	isInstAdmin, err := r.IsInstitutionAdmin(userID)
-	if err == nil && isInstAdmin {
 		return true, nil
 	}
 
@@ -88,138 +106,237 @@ func (r *UserRepository) AssignRoleByName(userID uint, roleName string) error {
 }
 
 func (r *UserRepository) GetUserInstitutionID(userID uint) (uint, error) {
-	isSuper, err := r.IsSuperAdmin(userID)
-	if err == nil && isSuper {
+	if userID == 0 {
 		return 0, nil
 	}
 
 	var instID uint
-	query := `SELECT institution_id FROM institution_admins WHERE user_id = ? LIMIT 1`
-	err = r.db.Raw(query, userID).Scan(&instID).Error
-	if err != nil {
-		return 0, nil
+	
+	_ = r.db.Raw("SELECT institution_id FROM institution_admins WHERE user_id = ? LIMIT 1", userID).Scan(&instID)
+	if instID > 0 {
+		return instID, nil
 	}
-	return instID, nil
+
+	// 2. Check principals
+	_ = r.db.Raw("SELECT institution_id FROM principals WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&instID)
+	if instID > 0 {
+		return instID, nil
+	}
+
+	// 3. Check faculties -> departments -> institution
+	_ = r.db.Raw(`
+		SELECT d.institution_id 
+		FROM faculties f 
+		JOIN departments d ON d.id = f.department_id 
+		WHERE f.user_id = ? AND f.deleted_at IS NULL AND d.deleted_at IS NULL 
+		LIMIT 1
+	`, userID).Scan(&instID)
+	if instID > 0 {
+		return instID, nil
+	}
+
+	// 4. Check students -> faculties -> departments -> institution
+	_ = r.db.Raw(`
+		SELECT d.institution_id 
+		FROM students s 
+		JOIN faculties f ON f.id = s.faculty_id 
+		JOIN departments d ON d.id = f.department_id 
+		WHERE s.user_id = ? AND s.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL 
+		LIMIT 1
+	`, userID).Scan(&instID)
+	if instID > 0 {
+		return instID, nil
+	}
+
+	return 0, nil
+}
+func (r *UserRepository) CheckUserRole(userID uint, targetRole string) (bool, error) {
+
+	var count int64
+
+	err := r.db.
+		Table("user_roles").
+		Joins("JOIN roles ON roles.id = user_roles.role_id").
+		Where("user_roles.user_id = ? AND roles.name = ?", userID, targetRole).
+		Count(&count).Error
+
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+func (r *UserRepository) UpdatePrincipalID(userID uint, principalID uint) error {
+	result := r.db.
+		Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("principal_id", principalID)
+
+	if result.Error != nil {
+		return result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	return nil
+}
+
+func (r *UserRepository) GetUserRoles(userID uint) ([]string, error) {
+	var roles []string
+	err := r.db.Raw(`
+		SELECT LOWER(TRIM(r.name))
+		FROM user_roles ur
+		JOIN roles r ON r.id = ur.role_id
+		WHERE ur.user_id = ?
+	`, userID).Scan(&roles).Error
+	return roles, err
+}
+
+func (r *UserRepository) IsInstitutionAdmin(userID uint) (bool, uint, error) {
+	if userID == 0 {
+		return false, 0, nil
+	}
+
+	// 1. Check institution_admins table directly
+	var institutionID uint
+	_ = r.db.Raw("SELECT institution_id FROM institution_admins WHERE user_id = ? LIMIT 1", userID).Scan(&institutionID)
+	if institutionID > 0 {
+		return true, institutionID, nil
+	}
+
+	// 2. Check user_roles for institution admin role
+	roles, err := r.GetUserRoles(userID)
+	if err == nil {
+		for _, role := range roles {
+			if role == "institution admin" || role == "institution_admin" || role == "inst_admin" || role == "institutionadmin" {
+				return true, institutionID, nil
+			}
+		}
+	}
+
+	return false, 0, nil
 }
 
 func (r *UserRepository) CanManageStudentFees(currentUserID uint, studentID uint) (bool, error) {
+	if currentUserID == 0 || studentID == 0 {
+		return false, errors.New("invalid user or student ID")
+	}
+
+	// 0. Student themselves: a student can always pay/manage their own fees
+	var isStudentSelf bool
+	_ = r.db.Raw(`
+		SELECT EXISTS(
+			SELECT 1 FROM students 
+			WHERE id = ? AND (user_id = ? OR id = (SELECT student_id FROM users WHERE id = ?))
+			  AND deleted_at IS NULL
+		)
+	`, studentID, currentUserID, currentUserID).Scan(&isStudentSelf)
+	if isStudentSelf {
+		return true, nil
+	}
+
+	var studentInstID uint
+	err := r.db.Raw(`
+		SELECT d.institution_id
+		FROM students s
+		JOIN faculties f ON f.id = s.faculty_id
+		JOIN departments d ON d.id = f.department_id
+		WHERE s.id = ? AND s.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL
+		LIMIT 1
+	`, studentID).Scan(&studentInstID).Error
+	if err != nil || studentInstID == 0 {
+		return false, errors.New("student institution not found")
+	}
+
+	// 1. Institution Admin: strictly scope to assigned institution only
+	isInstAdmin, assignedInstID, _ := r.IsInstitutionAdmin(currentUserID)
+	if isInstAdmin {
+		return assignedInstID > 0 && assignedInstID == studentInstID, nil
+	}
+
+	// 2. Super Admin
 	isSuper, err := r.IsSuperAdmin(currentUserID)
 	if err == nil && isSuper {
 		return true, nil
 	}
 
-	var studentInstitutionID uint
-	findInstQuery := `
-		SELECT d.institution_id
-		FROM students s
-		JOIN faculties f ON s.faculty_id = f.id
-		JOIN departments d ON f.department_id = d.id
-		WHERE s.id = ? 
-		  AND s.deleted_at IS NULL
-		  AND f.deleted_at IS NULL
-		  AND d.deleted_at IS NULL
-		LIMIT 1
-	`
-	err = r.db.Raw(findInstQuery, studentID).Scan(&studentInstitutionID).Error
-	if err != nil || studentInstitutionID == 0 {
-		return false, errors.New("student not found or not linked to an institution")
-	}
-
-	var isOwnerAdmin bool
-	adminQuery := `
-		SELECT EXISTS (
-			SELECT 1
-			FROM institution_admins
-			WHERE user_id = ? AND institution_id = ?
-		)
-	`
-	err = r.db.Raw(adminQuery, currentUserID, studentInstitutionID).Scan(&isOwnerAdmin).Error
-	if err != nil {
-		return false, err
-	}
-
-	return isOwnerAdmin, nil
-}
-
-func (r *UserRepository) RequireInstitutionAdminAccess(
-	userID uint,
-	institutionID uint,
-) (bool, error) {
-	isSuper, err := r.IsSuperAdmin(userID)
-	if err == nil && isSuper {
+	// 3. Principal
+	var isPrincipal bool
+	_ = r.db.Raw("SELECT EXISTS(SELECT 1 FROM principals WHERE user_id = ? AND institution_id = ? AND deleted_at IS NULL)", currentUserID, studentInstID).Scan(&isPrincipal)
+	if isPrincipal {
 		return true, nil
 	}
 
-	var hasAccess bool
-	matchQuery := `
-		SELECT EXISTS (
-			SELECT 1 
-			FROM institution_admins 
-			WHERE user_id = ? AND institution_id = ?
-		)
-	`
-	if err := r.db.Raw(matchQuery, userID, institutionID).Scan(&hasAccess).Error; err != nil {
-		return false, err
+	var isFaculty bool
+	_ = r.db.Raw("SELECT EXISTS(SELECT 1 FROM faculties f JOIN students s ON s.faculty_id = f.id WHERE f.user_id = ? AND s.id = ? AND f.deleted_at IS NULL AND s.deleted_at IS NULL)", currentUserID, studentID).Scan(&isFaculty)
+	if isFaculty {
+		return true, nil
 	}
 
-	return hasAccess, nil
+	return false, nil
 }
 
 func (r *UserRepository) HasInstitutionAccess(
 	userID uint,
 	institutionID uint,
 ) (bool, error) {
+	if userID == 0 || institutionID == 0 {
+		return false, errors.New("invalid user or institution ID")
+	}
 
+	// 1. Institution Admin: strictly scope to assigned institution only
+	isInstAdmin, assignedInstID, _ := r.IsInstitutionAdmin(userID)
+	if isInstAdmin {
+		return assignedInstID > 0 && assignedInstID == institutionID, nil
+	}
+
+	// 2. Super Admin (only if not an institution admin)
 	isSuper, err := r.IsSuperAdmin(userID)
 	if err == nil && isSuper {
 		return true, nil
 	}
 
-	var isInstAdmin bool
-	adminCheckQuery := `
-		SELECT EXISTS (
-			SELECT 1 
-			FROM institution_admins 
-			WHERE user_id = ?
-		)
-	`
-	if err := r.db.Raw(adminCheckQuery, userID).Scan(&isInstAdmin).Error; err != nil {
-		return false, err
-	}
-
-	if !isInstAdmin {
+	// 3. Principal
+	var isPrincipal bool
+	_ = r.db.Raw("SELECT EXISTS(SELECT 1 FROM principals WHERE user_id = ? AND institution_id = ? AND deleted_at IS NULL)", userID, institutionID).Scan(&isPrincipal)
+	if isPrincipal {
 		return true, nil
 	}
 
-	var hasAccess bool
-	matchQuery := `
-		SELECT EXISTS (
-			SELECT 1 
-			FROM institution_admins 
-			WHERE user_id = ? AND institution_id = ?
-		)
-	`
-	if err := r.db.Raw(matchQuery, userID, institutionID).Scan(&hasAccess).Error; err != nil {
-		return false, err
+	// 4. Faculty
+	var isFaculty bool
+	_ = r.db.Raw("SELECT EXISTS(SELECT 1 FROM faculties f JOIN departments d ON d.id = f.department_id WHERE f.user_id = ? AND d.institution_id = ? AND f.deleted_at IS NULL AND d.deleted_at IS NULL)", userID, institutionID).Scan(&isFaculty)
+	if isFaculty {
+		return true, nil
 	}
 
-	return hasAccess, nil
+	// 5. Student
+	var isStudent bool
+	_ = r.db.Raw("SELECT EXISTS(SELECT 1 FROM students s JOIN faculties f ON f.id = s.faculty_id JOIN departments d ON d.id = f.department_id WHERE s.user_id = ? AND d.institution_id = ? AND s.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL)", userID, institutionID).Scan(&isStudent)
+	if isStudent {
+		return true, nil
+	}
+
+	return false, nil
 }
+func (r *UserRepository) UpdateStudentID(userID uint, studentID uint) error {
+	result := r.db.
+		Model(&model.User{}).
+		Where("id = ?", userID).
+		Update("student_id", studentID)
 
-func (r *UserRepository) IsInstitutionAdmin(userID uint) (bool, error) {
-	var isInstAdmin bool
-	query := `
-		SELECT EXISTS (
-			SELECT 1 
-			FROM institution_admins 
-			WHERE user_id = ?
-		)
-	`
-	err := r.db.Raw(query, userID).Scan(&isInstAdmin).Error
-	if err != nil {
-		return false, err
+	if result.Error != nil {
+		return result.Error
 	}
-	return isInstAdmin, nil
+
+	if result.RowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	return nil
 }
 
 func (r *UserRepository) FindByVerificationToken(token string) (model.User, error) {
@@ -598,6 +715,12 @@ func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
 	}
 	var facultyID uint
 	_ = r.db.Raw("SELECT COALESCE(faculty_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&facultyID)
+	if facultyID == 0 {
+		_ = r.db.Raw("SELECT id FROM faculties WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&facultyID)
+		if facultyID > 0 {
+			_ = r.UpdateUserFacultyID(userID, facultyID)
+		}
+	}
 	return facultyID, nil
 }
 
@@ -607,6 +730,12 @@ func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
 	}
 	var studentID uint
 	_ = r.db.Raw("SELECT COALESCE(student_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&studentID)
+	if studentID == 0 {
+		_ = r.db.Raw("SELECT id FROM students WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&studentID)
+		if studentID > 0 {
+			_ = r.UpdateUserStudentID(userID, studentID)
+		}
+	}
 	return studentID, nil
 }
 
@@ -616,7 +745,59 @@ func (r *UserRepository) GetUserPrincipalID(userID uint) (uint, error) {
 	}
 	var principalID uint
 	_ = r.db.Raw("SELECT COALESCE(principal_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&principalID)
+	if principalID == 0 {
+		_ = r.db.Raw("SELECT id FROM principals WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&principalID)
+		if principalID > 0 {
+			_ = r.UpdateUserPrincipalID(userID, principalID)
+		}
+	}
 	return principalID, nil
+}
+
+func (r *UserRepository) GetInstitutionAdminID(userID uint) (uint, error) {
+
+	var institutionID uint
+
+	err := r.db.
+		Table("institution_admins").
+		Select("institution_id").
+		Where("user_id = ?", userID).
+		Scan(&institutionID).Error
+
+	return institutionID, err
+}
+func (r *UserRepository) IsSuperAdminByRoleID(roleID uint) (bool, error) {
+	var count int64
+	err := r.db.
+		Table("roles").
+		Where("id = ? AND LOWER(name) IN ('super admin', 'super_admin', 'superadmin')", roleID).
+		Count(&count).Error
+
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+func (r *UserRepository) GetUserRoleID(userID uint) (uint, error) {
+
+	var roleID uint
+
+	err := r.db.
+		Table("user_roles").
+		Select("role_id").
+		Where("user_id = ?", userID).
+		Scan(&roleID).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	if roleID == 0 {
+		return 0, errors.New("role not assigned to user")
+	}
+
+	return roleID, nil
 }
 
 func (r *UserRepository) CheckUserExistingProfile(userID uint) (string, error) {
@@ -645,20 +826,55 @@ func (r *UserRepository) CheckUserExistingProfile(userID uint) (string, error) {
 		return "principal", nil
 	}
 
+	var count int64
+	_ = r.db.Raw("SELECT COUNT(*) FROM students WHERE user_id = ? AND deleted_at IS NULL", userID).Scan(&count)
+	if count > 0 {
+		return "student", nil
+	}
+	_ = r.db.Raw("SELECT COUNT(*) FROM faculties WHERE user_id = ? AND deleted_at IS NULL", userID).Scan(&count)
+	if count > 0 {
+		return "faculty", nil
+	}
+	_ = r.db.Raw("SELECT COUNT(*) FROM principals WHERE user_id = ? AND deleted_at IS NULL", userID).Scan(&count)
+	if count > 0 {
+		return "principal", nil
+	}
+
 	return "", nil
 }
 
 func (r *UserRepository) UpdateUserStudentID(userID uint, studentID uint) error {
-	res := r.db.Exec("UPDATE users SET student_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND (faculty_id IS NULL OR faculty_id = 0) AND (principal_id IS NULL OR principal_id = 0)", studentID, userID)
+	if userID == 0 {
+		return nil
+	}
+	isSuper, _ := r.IsSuperAdmin(userID)
+	if isSuper {
+		return nil
+	}
+	res := r.db.Exec("UPDATE users SET student_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", studentID, userID)
 	return res.Error
 }
 
 func (r *UserRepository) UpdateUserFacultyID(userID uint, facultyID uint) error {
-	res := r.db.Exec("UPDATE users SET faculty_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND (student_id IS NULL OR student_id = 0) AND (principal_id IS NULL OR principal_id = 0)", facultyID, userID)
+	if userID == 0 {
+		return nil
+	}
+	isSuper, _ := r.IsSuperAdmin(userID)
+	if isSuper {
+		return nil
+	}
+	res := r.db.Exec("UPDATE users SET faculty_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", facultyID, userID)
 	return res.Error
 }
 
 func (r *UserRepository) UpdateUserPrincipalID(userID uint, principalID uint) error {
-	res := r.db.Exec("UPDATE users SET principal_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL AND (student_id IS NULL OR student_id = 0) AND (faculty_id IS NULL OR faculty_id = 0)", principalID, userID)
+	if userID == 0 {
+		return nil
+	}
+	isSuper, _ := r.IsSuperAdmin(userID)
+	if isSuper {
+		return nil
+	}
+	res := r.db.Exec("UPDATE users SET principal_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", principalID, userID)
 	return res.Error
 }

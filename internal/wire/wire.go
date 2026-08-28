@@ -16,8 +16,10 @@ import (
 
 func InitializeApp() (*fiber.App, error) {
 	wire.Build(
+		// Database
 		database.NewDB,
 
+		// Repositories
 		repository.NewUserRepository,
 		repository.NewInstitutionRepository,
 		repository.NewDepartmentRepository,
@@ -30,6 +32,7 @@ func InitializeApp() (*fiber.App, error) {
 		repository.NewSessionRepository,
 		repository.NewMenuRepository,
 
+		// Services
 		services.NewSessionService,
 		services.NewUserService,
 		services.NewInstituteService,
@@ -42,10 +45,15 @@ func InitializeApp() (*fiber.App, error) {
 		services.NewPermissionService,
 		services.NewMenuService,
 
+		// Controllers
 		controller.NewUserController,
 		controller.NewInstituteController,
 		controller.NewDepartmentController,
+
+		// FacultyController requires:
+		// FacultyService + UserService
 		controller.NewFacultyController,
+
 		controller.NewPrincipalControllers,
 		controller.NewStudentController,
 		controller.NewFeesController,
@@ -53,6 +61,7 @@ func InitializeApp() (*fiber.App, error) {
 		controller.NewPermissionController,
 		controller.NewMenuController,
 
+		// Routes
 		routes.NewApp,
 	)
 

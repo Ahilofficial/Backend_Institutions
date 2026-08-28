@@ -44,10 +44,13 @@ const (
 	PermissionViewFees   = "VIEW_FEES"
 	PermissionUpdateFees = "UPDATE_FEE"
 	PermissionDeleteFees = "DELETE_FEE"
+	PermissionViewIDFees = "VIEW_ID_FES"
 
 	PermissionManageInstitution = "institution.manage"
 
 	PermissionAssignRoles = "ASSIGN_ROLE"
+	FacultyStudentMonth="FacultyStudentMonth"
+	PermissionFacultyViewStudents="PermissionFacultyViewStudents"
 )
 
 var AllPermissions = []string{
@@ -86,13 +89,17 @@ var AllPermissions = []string{
 	PermissionViewFees,
 	PermissionUpdateFees,
 	PermissionDeleteFees,
+	PermissionViewIDFees,
+
 	PermissionViewPayments,
 	PermissionAdminPermission,
 	PermissionManageInstitution,
 	PermissionViewIDPayments,
 	PermissionCreatePayment,
 	
-
+	FacultyStudentMonth,
 
 	PermissionAssignRoles,
+
+	PermissionFacultyViewStudents,
 }

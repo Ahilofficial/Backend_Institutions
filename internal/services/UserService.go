@@ -42,6 +42,10 @@ func NewUserService(userrepo *repository.UserRepository, sessionService *Session
 }
 
 func (s *UserService) SignUp(dto *dto.SignUpDTO) (model.User, error) {
+	if dto.Role != "" {
+		return s.SignUpWithRole(dto, dto.Role)
+	}
+
 	hashedPassword, err := utils.HashPassword(dto.Password)
 	if err != nil {
 		return model.User{}, err
@@ -83,14 +87,46 @@ func (s *UserService) SignUp(dto *dto.SignUpDTO) (model.User, error) {
 }
 
 func (s *UserService) SignUpWithRole(dto *dto.SignUpDTO, roleName string) (model.User, error) {
-	user, err := s.SignUp(dto)
+	hashedPassword, err := utils.HashPassword(dto.Password)
+	if err != nil {
+		return model.User{}, err
+	}
+
+	token := utils.SignUpToken()
+
+	user := model.User{
+		Name:              dto.Name,
+		Email:             dto.Email,
+		Phone:             dto.Phone,
+		Password:          hashedPassword,
+		IsActive:          false,
+		IsVerified:        false,
+		VerificationToken: token,
+		TokenExpiresAt:    time.Now().Add(24 * time.Hour),
+	}
+
+	err = s.userrepo.CreateUser(&user)
 	if err != nil {
 		return model.User{}, err
 	}
 
 	if strings.TrimSpace(roleName) != "" {
-		_ = s.userrepo.AssignRoleByName(user.ID, roleName)
+		_ = s.userrepo.AssignRoleByName(user.ID, strings.TrimSpace(roleName))
 	}
+
+	verifyURL := fmt.Sprintf("%s/auth/verify?token=%s", getBaseURL(), token)
+	subject := "Verify your email - Backend Institutions"
+	body := fmt.Sprintf(`<h1>Hello %s,</h1>
+<p>Thank you for signing up. Please verify your email by clicking the link below:</p>
+<p><a href="%s" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; display: inline-block; border-radius: 5px;">Verify Email Address</a></p>
+<p>Or copy and paste this link in your browser:<br/><a href="%s">%s</a></p>
+<p>This link will expire in 24 hours.</p>`, user.Name, verifyURL, verifyURL, verifyURL)
+
+	go func(email, subject, body string) {
+		if sendErr := grpc.SendEmail(email, subject, body, "signup"); sendErr != nil {
+			log.Printf("Failed to send verification email via gRPC: %v\n", sendErr)
+		}
+	}(user.Email, subject, body)
 
 	return user, nil
 }
@@ -132,9 +168,24 @@ func (s *UserService) SendVerificationEmail(userID uint) error {
 	return nil
 }
 
+func (s *UserService) CheckUserRole(userID uint, targetRole string) (bool, error) {
+	return s.userrepo.CheckUserRole(userID, targetRole)
+}
+func (s *UserService) UpdateStudentID(userID uint, studentID uint) error {
+	return s.userrepo.UpdateStudentID(userID, studentID)
+}
+func (s *UserService) GetUserByID(userID uint) (*model.User, error) {
+	return s.userrepo.GetUserByID(userID)
+}
+func (s *UserService) UpdatePrincipalID(userID uint, principalID uint) error {
+	return s.userrepo.UpdatePrincipalID(userID, principalID)
+}
+func (s *UserService) UpdateFacultyID(userID uint, facultyID uint) error {
+	return s.userrepo.UpdateFacultyID(userID, facultyID)
+}
+
 func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, uint, string, string, error) {
 	user, err := s.userrepo.FindByEmail(dto.Email)
-
 	if err != nil {
 		return "", "", 0, "", "", errors.New("invalid email or password")
 	}
@@ -152,17 +203,19 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 		return "", "", 0, "", "", errors.New("invalid email or password")
 	}
 
-	hasRole, err := s.userrepo.HasAnyRoleAssigned(user.ID)
-	if err != nil {
-		return "", "", 0, "", "", err
+	// Auto-detect and sync profile IDs if mapped in respective tables
+	if user.StudentID == 0 {
+		user.StudentID, _ = s.userrepo.GetUserStudentID(user.ID)
+	}
+	if user.FacultyID == 0 {
+		user.FacultyID, _ = s.userrepo.GetUserFacultyID(user.ID)
+	}
+	if user.PrincipalID == 0 {
+		user.PrincipalID, _ = s.userrepo.GetUserPrincipalID(user.ID)
 	}
 
-	if !hasRole {
-		return "", "", 0, "", "", errors.New("role not assigned yet by super admin, please wait for role assignment")
-	}
-
-	rolesList, _ := s.userrepo.FetchUserRoles(user.ID)
 	primaryRole := ""
+	rolesList, _ := s.userrepo.FetchUserRoles(user.ID)
 	if len(rolesList) > 0 {
 		primaryRole = rolesList[0].Name
 	}
@@ -179,6 +232,7 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 			log.Printf("Failed to send sign-in email via gRPC: %v\n", sendErr)
 		}
 	}(user.Email, user.Name)
+	
 	sessionID := uuid.New().String()
 	userAgent := c.Get("User-Agent")
 
@@ -356,5 +410,20 @@ func (s *UserService) ResendMail(email string) error {
 }
 
 func (s *UserService) GetProfileByID(id uint) (model.User, error) {
-	return s.userrepo.FindByID(id)
+	user, err := s.userrepo.FindByID(id)
+	if err != nil {
+		return model.User{}, err
+	}
+	if user.StudentID == 0 {
+		user.StudentID, _ = s.userrepo.GetUserStudentID(id)
+	}
+	if user.FacultyID == 0 {
+		user.FacultyID, _ = s.userrepo.GetUserFacultyID(id)
+	}
+	if user.PrincipalID == 0 {
+		user.PrincipalID, _ = s.userrepo.GetUserPrincipalID(id)
+	}
+	roles, _ := s.userrepo.FetchUserRoles(id)
+	user.Roles = roles
+	return user, nil
 }

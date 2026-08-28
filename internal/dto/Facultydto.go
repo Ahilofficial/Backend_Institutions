@@ -64,6 +64,7 @@ type FacultyResponseDTO struct {
 	Gender       string               `json:"gender"`
 	JoiningDate  time.Time            `json:"joining_date"`
 	DepartmentID uint                 `json:"department_id"`
+	UserID       uint                 `json:"user_id,omitempty"`
 	IsActive     bool                 `json:"isactive"`
 	Students     []StudentResponseDTO `json:"students"`
 }

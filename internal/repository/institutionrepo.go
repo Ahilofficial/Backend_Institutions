@@ -3,8 +3,6 @@ package repository
 import (
 	"backend_institutions/internal/model"
 	"errors"
-	"fmt"
-
 	"time"
 
 	"gorm.io/gorm"
@@ -82,6 +80,49 @@ func (r *InstitutionRepository) FetchInstitution() ([]model.Institutions, error)
 	return insts, err
 }
 
+func (r *InstitutionRepository) IsInstAdminRepo(userID uint) bool {
+	if userID == 0 {
+		return false
+	}
+	var count int64
+	err := r.db.Raw("SELECT COUNT(*) FROM institution_admins WHERE user_id = ?", userID).Scan(&count).Error
+	if err == nil && count > 0 {
+		return true
+	}
+
+	var roleCount int64
+	err = r.db.Raw(`
+		SELECT COUNT(*) 
+		FROM user_roles ur 
+		JOIN roles r ON r.id = ur.role_id 
+		WHERE ur.user_id = ? AND LOWER(TRIM(r.name)) IN ('institution admin', 'institution_admin', 'inst_admin', 'institutionadmin')
+	`, userID).Scan(&roleCount).Error
+	if err == nil && roleCount > 0 {
+		return true
+	}
+
+	return false
+}
+
+func (r *InstitutionRepository) GetInstitutionIDForUserRepo(userID uint) uint {
+	if userID == 0 {
+		return 0
+	}
+	var userInstitution uint
+	err := r.db.Raw("SELECT institution_id FROM institution_admins WHERE user_id = ? LIMIT 1", userID).Scan(&userInstitution).Error
+	if err != nil {
+		return 0
+	}
+	return userInstitution
+}
+func(r *InstitutionRepository) HasInstituteRepo(userID uint, id uint)(uint,error){
+	var institutionID uint
+	err:=r.db.Raw("SELECT institution_id from institution_admins where user_id =?",userID).Scan(&institutionID).Error
+	if err != nil {
+    return 0,err
+}
+ 	return institutionID , nil
+}
 func (r *InstitutionRepository) FetchInstitutionPaginated(search string, page, limit int) ([]model.Institutions, int64, error) {
 	var (
 		insts []model.Institutions
@@ -90,7 +131,7 @@ func (r *InstitutionRepository) FetchInstitutionPaginated(search string, page, l
 
 	query := r.db.Model(&model.Institutions{})
 
-	// Search
+	
 	if search != "" {
 		search = "%" + search + "%"
 		query = query.Where(
@@ -99,7 +140,7 @@ func (r *InstitutionRepository) FetchInstitutionPaginated(search string, page, l
 		)
 	}
 
-	// Count
+	
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -219,24 +260,5 @@ func (r *InstitutionRepository) UpdateInstitution(institute *model.Institutions)
 }
 
 func (r *InstitutionRepository) GetInstitutionIDByUserID(userID uint) (uint, error) {
-
-	var institutionID uint
-
-	result := r.db.Raw(`
-		SELECT institution_id
-		FROM institution_admins
-		WHERE user_id = ?
-		AND deleted_at IS NULL
-		LIMIT 1
-	`, userID).Scan(&institutionID)
-
-	if result.Error != nil {
-		return 0, result.Error
-	}
-
-	if result.RowsAffected == 0 {
-		return 0, fmt.Errorf("institution admin mapping not found")
-	}
-
-	return institutionID, nil
+	return 0, nil
 }

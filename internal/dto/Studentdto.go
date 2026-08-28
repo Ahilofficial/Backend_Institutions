@@ -8,9 +8,12 @@ import (
 )
 
 type CreateStudentDTO struct {
-	Name      string `json:"name"`
-	Gender    string `json:"gender"`
-	FacultyID uint   `json:"faculty_id"`
+	Name          string `json:"name"`
+	Gender        string `json:"gender"`
+	FacultyID     uint   `json:"faculty_id"`
+	Rank          uint   `json:"rank"`
+	Hosteller     bool   `json:"Hosteller"`
+	Scholorship   bool   `json:"Scholorship"`
 }
 
 func (dto *CreateStudentDTO) Sanitize() {
@@ -66,6 +69,7 @@ type StudentResponseDTO struct {
 	Name      string             `json:"name"`
 	Gender    string             `json:"gender"`
 	FacultyID uint               `json:"faculty_id"`
+	UserID    uint               `json:"user_id,omitempty"`
 	IsActive  bool               `json:"is_active"`
 	Faculty   *StudentFacultyDTO `json:"faculty,omitempty"`
 	Fees      []FeesResponseDTO  `json:"fees,omitempty"`
@@ -85,4 +89,29 @@ func ToStudentResponseListDTO(studs []model.Student) []StudentResponseDTO {
 	}
 
 	return list
+}
+
+type StudentMonthlyStatusDTO struct {
+	StudentID     uint    `json:"student_id"`
+	StudentName   string  `json:"student_name"`
+	Gender        string  `json:"gender"`
+	FacultyID     uint    `json:"faculty_id"`
+	FacultyName   string  `json:"faculty_name,omitempty"`
+	DepartmentID  uint    `json:"department_id,omitempty"`
+	InstitutionID uint    `json:"institution_id,omitempty"`
+	Month         string  `json:"month"`
+	IsPaid        bool    `json:"is_paid"`
+	AmountPaid    float64 `json:"amount_paid"`
+	PaymentMode   string  `json:"payment_mode,omitempty"`
+	TotalFee      float64 `json:"total_fee"`
+	PendingFee    float64 `json:"pending_fee"`
+}
+
+type MonthlyStudentsOverviewDTO struct {
+	Month               string                    `json:"month"`
+	InstitutionID       uint                      `json:"institution_id,omitempty"`
+	TotalStudents       int                       `json:"total_students"`
+	PaidStudentsCount   int                       `json:"paid_students_count"`
+	UnpaidStudentsCount int                       `json:"unpaid_students_count"`
+	Students            []StudentMonthlyStatusDTO `json:"students"`
 }
