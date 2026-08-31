@@ -721,7 +721,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"department_name\": \"Computer Science and Engineering\",\n  \"institution_id\": 1\n}"
+              "raw": "{\n  \"department_name\": \"Computer Science and Engineering\",\n  \"institution_id\": 1,\n  \"fee_amount\": 100000\n}"
             },
             "url": {
               "raw": "{{base_url}}/departments",
@@ -912,7 +912,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Alice Johnson\",\n  \"gender\": \"Female\",\n  \"faculty_id\": 1\n}"
+              "raw": "{\n  \"name\": \"Alice Johnson\",\n  \"gender\": \"Female\",\n  \"faculty_id\": 1,\n  \"hosteller\": true,\n  \"scholorship\": false,\n  \"mq\": false\n}"
             },
             "url": {
               "raw": "{{base_url}}/students",
@@ -1081,7 +1081,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"student_id\": 1,\n  \"total_amount\": 50000,\n  \"payment_mode\": \"Online\"\n}"
+              "raw": "{\n  \"amount\": 100000,\n  \"department_id\": 1\n}"
             },
             "url": {
               "raw": "{{base_url}}/fees",

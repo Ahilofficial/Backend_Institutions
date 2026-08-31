@@ -8,33 +8,30 @@ import (
 )
 
 type CreateFeesDTO struct {
-	PaymentMode              string  `json:"payment_mode"`
-	TotalAmount              float64 `json:"total_amount"`
-	Amount                   float64 `json:"amount"`
-	StudentID                uint    `json:"student_id"`
+	Amount       float64 `json:"amount"`
+	HostelAmount uint     `json:"hostel_amount"`
+	DepartmentID uint    `json:"department_id"`
+
 }
 
-func (dto *CreateFeesDTO) Sanitize() {
-	dto.PaymentMode = strings.TrimSpace(strings.ToLower(dto.PaymentMode))
-	if dto.TotalAmount == 0 && dto.Amount > 0 {
-		dto.TotalAmount = dto.Amount
-	}
-}
+func (dto *CreateFeesDTO) Sanitize() {}
 
 func (dto *CreateFeesDTO) Validate() error {
-	if dto.TotalAmount == 0 && dto.Amount > 0 {
-		dto.TotalAmount = dto.Amount
-	}
-	if dto.PaymentMode == "" {
-		return errors.New("payment mode is required")
-	}
-	if dto.TotalAmount <= 0 {
+	if dto.Amount <= 0 {
 		return errors.New("amount is required and must be greater than 0")
 	}
-	if dto.StudentID == 0 {
-		return errors.New("student id is required")
+	if dto.DepartmentID == 0 {
+		return errors.New("department_id is required")
 	}
 	return nil
+}
+
+type StudentPaymentResponseDTO struct {
+	ID          uint    `json:"id"`
+	StudentID   uint    `json:"student_id"`
+	PaymentID   uint    `json:"payment_id"`
+	TotalAmount float64 `json:"total_amount"`
+	Status      string  `json:"status"`
 }
 
 type UpdateFeesDTO struct {
@@ -66,14 +63,15 @@ type PaymentResponseDTO struct {
 	ID          uint    `json:"id"`
 	Month       string  `json:"month"`
 	AmountPaid  float64 `json:"amount_paid"`
-	PaymentMode string  `json:"payment_mode"`
+	// PaymentMode string  `json:"payment_mode"`
 }
 type FeesResponseDTO struct {
 	ID            uint                 `json:"id"`
 	TotalAmount   float64              `json:"total_amount"`
 	TotalPaid     float64              `json:"total_paid"`
 	PendingAmount float64              `json:"pending_amount"`
-	StudentID     uint                 `json:"student_id"`
+	StudentID     uint                 `json:"student_id,omitempty"`
+	DepartmentID  uint                 `json:"department_id,omitempty"`
 	IsActive      bool                 `json:"is_active"`
 	Payments      []PaymentResponseDTO `json:"payments"`
 }

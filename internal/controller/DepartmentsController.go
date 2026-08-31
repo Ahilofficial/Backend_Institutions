@@ -80,6 +80,7 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 
 	department := model.Department{
 		DepartmentName: body.DepartmentName,
+		// FeeAmount:      body.FeeAmount,
 		InstitutionID:  body.InstitutionID,
 		IsActive:       true,
 	}

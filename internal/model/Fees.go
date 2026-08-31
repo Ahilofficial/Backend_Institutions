@@ -17,8 +17,10 @@ type Fees struct {
 	DeletedAt     gorm.DeletedAt `json:"-"`
 	IsActive      bool           `gorm:"default:true" json:"isactive"`
 
-	StudentID uint `json:"student_id"`
+	StudentID uint `gorm:"default:null" json:"student_id,omitempty"`
 
-	Student  *Student  `gorm:"foreignKey:StudentID;references:ID" json:"student,omitempty"`
-	Payments []Payment `gorm:"foreignKey:FeeID;references:ID" json:"payments,omitempty"`
+	Student      *Student    `gorm:"foreignKey:StudentID;references:ID" json:"student,omitempty"`
+	Payments     []Payment   `gorm:"foreignKey:FeeID;references:ID" json:"payments,omitempty"`
+	DepartmentID uint        `gorm:"index" json:"department_id"`
+	Department   *Department `gorm:"foreignKey:DepartmentID;references:ID" json:"department,omitempty"`
 }

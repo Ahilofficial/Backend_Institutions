@@ -24,15 +24,30 @@ func (r *FeesRepository) CreateFees(fees *model.Fees) error {
 
 	now := time.Now()
 
+	var studentIDVal interface{}
+	if fees.StudentID > 0 {
+		studentIDVal = fees.StudentID
+	} else {
+		studentIDVal = nil
+	}
+
+	var departmentIDVal interface{}
+	if fees.DepartmentID > 0 {
+		departmentIDVal = fees.DepartmentID
+	} else {
+		departmentIDVal = nil
+	}
+
 	res, err := db.Exec(
 		`INSERT INTO fees
-		(payment_mode, total_amount, total_paid, pending_amount, student_id, created_at, updated_at, is_active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		(payment_mode, total_amount, total_paid, pending_amount, student_id, department_id, created_at, updated_at, is_active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		fees.PaymentMode,
 		fees.TotalAmount,
 		fees.TotalPaid,
 		fees.PendingAmount,
-		fees.StudentID,
+		studentIDVal,
+		departmentIDVal,
 		now,
 		now,
 		true,
@@ -49,6 +64,15 @@ func (r *FeesRepository) CreateFees(fees *model.Fees) error {
 	fees.ID = uint(id)
 	fees.IsActive = true
 	return nil
+}
+
+func (r *FeesRepository) FetchFeeByDepartmentID(departmentID uint) (*model.Fees, error) {
+	var fee model.Fees
+	err := r.db.Where("department_id = ? AND deleted_at IS NULL", departmentID).First(&fee).Error
+	if err != nil {
+		return nil, err
+	}
+	return &fee, nil
 }
 
 func (r *FeesRepository) FetchFees() ([]model.Fees, error) {
@@ -132,6 +156,19 @@ func (r *FeesRepository) DeleteFees(id uint) error {
 	}
 	return nil
 }
+
+func (r *FeesRepository) FetchUserStudentID(userID uint) (uint, error) {
+	var studentID uint
+	err:= r.db.Raw(`
+	select student_id from users where id=? and deleted_at is null
+	`, userID).Scan(&studentID).Error
+	if err != nil {
+		return 0, err
+	}
+	return studentID, nil
+}
+	
+
 
 func (r *FeesRepository) FetchInactiveFees() ([]model.Fees, error) {
 	var fees []model.Fees

@@ -7,14 +7,19 @@ import (
 )
 
 type Payment struct {
-	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Month       string         `json:"month"`
-	AmountPaid  float64        `gorm:"type:decimal(10,2)" json:"amount_paid"`
-	PaymentMode string         `json:"payment_mode"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-"`
+	ID           uint           `gorm:"primaryKey;autoIncrement" json:"id"`
+	Month        string         `gorm:"type:varchar(50)" json:"month"`
+	HostelAmount float64        `gorm:"type:decimal(10,2);default:0" json:"hostel_amount"`
+	AmountPaid   float64        `gorm:"type:decimal(10,2);not null" json:"amount_paid"`
+	PaymentMode  string         `gorm:"type:varchar(50)" json:"payment_mode"`
 
-	FeeID uint  `json:"fee_id"`
-	Fee   *Fees `gorm:"foreignKey:FeeID;references:ID" json:"fee,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `json:"-"`
+
+	FeeID     uint  `gorm:"not null;index" json:"fee_id"`
+	StudentID *uint `gorm:"default:null;index" json:"student_id,omitempty"`
+
+	Fee     *Fees    `gorm:"foreignKey:FeeID;references:ID" json:"fee,omitempty"`
+	Student *Student `gorm:"foreignKey:StudentID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"student,omitempty"`
 }

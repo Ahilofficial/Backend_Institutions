@@ -5,6 +5,7 @@ import (
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
 	"errors"
+	"fmt"
 )
 
 type StudentService struct {
@@ -35,6 +36,11 @@ func (s *StudentService) GetUserExistingProfile(userID uint) (string, error) {
 	return s.userRepo.CheckUserExistingProfile(userID)
 }
 
+func (s *StudentService) GetCourseDurationByFacultyID(facultyID uint) (uint, error) {
+	return s.studentRepo.GetCourseDurationByFacultyIDRepo(facultyID)
+}
+
+
 func (s *StudentService) CreateStudentService(
 	userID uint,
 	student *model.Student,
@@ -60,37 +66,144 @@ func (s *StudentService) CreateStudentService(
 			return nil, errors.New("user is already registered as a " + existingType)
 		}
 	}
-	
 
 	student.UserID = targetUserID
+	
+	student.Hosteller = createstudent.Hosteller
+
+	
+	if (createstudent.MQ ) && createstudent.Scholorship {
+		return nil, errors.New("management quota student cannot have scholarship")
+	}
+
+	student.MQ = createstudent.MQ
+	student.Scholarship = createstudent.Scholorship
+
+	
+	// Fetch department fees (college_amount, hostel_amount, base_amount) and payment ID
+	collegeAmount, hostelAmount, baseDeptFee, paymentID, err := s.facultyRepo.GetDepartmentFeeAndPaymentIDByFacultyID(student.FacultyID)
+	if err != nil || (collegeAmount <= 0 && baseDeptFee <= 0) {
+		return nil, errors.New("department fee configuration not found; please configure department fees first")
+	}
+
+	if baseDeptFee <= 0 {
+		baseDeptFee = collegeAmount + hostelAmount
+	}
+
+	student.BaseAmount = baseDeptFee
+
+	var finalTuitionFee float64
+	var finalHostelFee float64
+
+	if student.MQ {
+		
+		finalTuitionFee = collegeAmount + (collegeAmount * 0.50)
+		if student.Hosteller {
+			finalHostelFee = hostelAmount + (hostelAmount * 0.25)
+		} else {
+			finalHostelFee = 0
+		}
+	} else if student.Scholarship {
+		
+		finalTuitionFee = collegeAmount - (collegeAmount * 0.25)
+		if student.Hosteller {
+			finalHostelFee = hostelAmount
+		} else {
+			finalHostelFee = 0
+		}
+	} else {
+		
+		finalTuitionFee = collegeAmount
+		if student.Hosteller {
+			finalHostelFee = hostelAmount
+		} else {
+			finalHostelFee = 0
+		}
+	}
+
+	
+	student.FeeAmount = finalTuitionFee + finalHostelFee
+
+	// 5. Persist student in database
 	if err := s.studentRepo.CreateStudent(student); err != nil {
 		return nil, err
 	}
 
-	
-	if createstudent.Rank<=100{
-		student.Scholorship=true
+	// 6. Create StudentPayment record
+	studentPayment := model.StudentPayment{
+		StudentID:   student.ID,
+		PaymentID:   paymentID,
+		Status:      "pending",
+		TotalAmount: student.FeeAmount,
 	}
-	if createstudent.Scholorship==true && createstudent.Rank<100{
-		student.FeeAmount = student.FeeAmount - (student.FeeAmount * 25 / 100)
+
+	if err := s.studentRepo.CreateStudentPayment(&studentPayment); err != nil {
+		
+		fmt.Printf("Warning: Failed to create student payment record: %v\n", err)
+	} else {
+		student.StudentPayments = append(student.StudentPayments, studentPayment)
 	}
-	if createstudent.Scholorship==true && createstudent.Rank<50{
-		student.FeeAmount = student.FeeAmount - (student.FeeAmount * 25 / 100)
-	}
-	if createstudent.Rank>100{
-		student.MQ=true
-	}
-	if student.MQ==true{
-		student.FeeAmount=student.FeeAmount+(student.FeeAmount*50/100)
-	}
-	var model model.Payment
-	err:=c.Bind().Body(&model);err!=nil{
-		return nil, nil
-	}
+
 	return student, nil
+}
+
+
+
+func(s *StudentService)StudentVerification(studentID uint, facultyID uint)(model.StudentVerificationAccess, error){
+	stu_verify:=model.StudentVerificationAccess{
+		StudentID:studentID,
+		FacultyID:facultyID,
+	}
+	err:=s.studentRepo.StudentVerificationRepo(stu_verify)
+	if err != nil {
+		return model.StudentVerificationAccess{}, err
+	}
+	
+	return stu_verify,nil
+}
+
+
+func (s *StudentService) UpdateStudentVerified(
+	userID uint,
+	studentID uint,
+) error {
+
+	
+	facultyID, err := s.userRepo.GetUserFacultyID(userID)
+
+	if err != nil {
+		return errors.New("faculty not found")
 	}
 
+	
+	var access model.StudentVerificationAccess
 
+	err = s.studentRepo.GetStudentVerificationAccess(
+		studentID,
+		facultyID,
+		&access,
+	)
+
+	if err != nil {
+		return errors.New(
+			"you must view the student before verification",
+		)
+	}
+
+	err = s.studentRepo.UpdateStudentVerified(studentID)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+
+// func ( s *StudentService)GetUserFacultyID(userID uint) uint{
+// 	return s.studentRepo.GetUserFacultyIDRepo(userID)
+// }
 
 	
 
@@ -143,29 +256,13 @@ func (s *StudentService) GetStudentServiceById(
 	id uint,
 ) (*model.Student, error) {
 
-	// Get logged-in user's role ID
-	roleID, err := s.userRepo.GetUserRoleID(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get requested student
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check whether this role is a SuperAdmin role
-	isSuper, err := s.userRepo.IsSuperAdminByRoleID(roleID)
-	if err != nil {
-		return nil, err
-	}
-
-	if isSuper {
-		return &student, nil
-	}
-
-	// Check whether this role is assigned as an Institution Admin
+	
+	
 	institutionID, err := s.userRepo.GetInstitutionAdminID(userID)
 	if err != nil {
 		return nil, err

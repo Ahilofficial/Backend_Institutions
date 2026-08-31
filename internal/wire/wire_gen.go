@@ -40,7 +40,7 @@ func InitializeApp() (*fiber.App, error) {
 	studentService := services.NewStudentService(studentRepository, facultyRepository, userRepository)
 	studentController := controller.NewStudentController(studentService, userService, instituteService, facultyService)
 	feesRepository := repository.NewFeesRepository(db)
-	feesService := services.NewFeesService(feesRepository, studentRepository, userRepository)
+	feesService := services.NewFeesService(feesRepository, studentRepository, userRepository, departmentRepository)
 	feesController := controller.NewFeesController(feesService)
 	roleRepository := repository.NewRoleRepository(db)
 	roleService := services.NewRoleService(roleRepository)

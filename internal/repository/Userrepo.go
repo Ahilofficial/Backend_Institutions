@@ -148,6 +148,12 @@ func (r *UserRepository) GetUserInstitutionID(userID uint) (uint, error) {
 		return instID, nil
 	}
 
+	// 5. Check admission_managers
+	_ = r.db.Raw("SELECT institution_id FROM admission_managers WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&instID)
+	if instID > 0 {
+		return instID, nil
+	}
+
 	return 0, nil
 }
 func (r *UserRepository) CheckUserRole(userID uint, targetRole string) (bool, error) {
@@ -714,13 +720,8 @@ func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
 		return 0, nil
 	}
 	var facultyID uint
-	_ = r.db.Raw("SELECT COALESCE(faculty_id, 0) FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&facultyID)
-	if facultyID == 0 {
-		_ = r.db.Raw("SELECT id FROM faculties WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&facultyID)
-		if facultyID > 0 {
-			_ = r.UpdateUserFacultyID(userID, facultyID)
-		}
-	}
+	_ = r.db.Raw("SELECT faculty_id FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&facultyID)
+	
 	return facultyID, nil
 }
 

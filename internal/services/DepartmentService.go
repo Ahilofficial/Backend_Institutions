@@ -50,7 +50,7 @@ func (s *DepartmentService) checkInstitutionAccess(
 func (s *DepartmentService) AddDepartmentService(
 	userID uint,
 	department *model.Department,
-	// c *fiber.Ctx,
+	
 ) (model.Department, error) {
 
 	if err := s.checkInstitutionAccess(
@@ -60,9 +60,6 @@ func (s *DepartmentService) AddDepartmentService(
 		return model.Department{}, err
 	}
 	
-	
-	
-
 	if err := s.departmentRepo.CreateDepartment(department); err != nil {
 		return model.Department{}, err
 	}
@@ -146,7 +143,12 @@ func (s *DepartmentService) UpdateDepartmentService(
 	}
 
 	department.DepartmentName = req.DepartmentName
+	// department.FeeAmount = req.FeeAmount
 	return s.departmentRepo.UpdateDepartmentById(&department)
+}
+
+func (s *DepartmentService) GetDepartmentFeeService(departmentID uint) (float64, error) {
+	return s.departmentRepo.GetDepartmentFee(departmentID)
 }
 
 func(s *DepartmentService)GetInstitutionIDForUserService(id uint)(uint){

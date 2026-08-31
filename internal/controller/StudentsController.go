@@ -5,6 +5,7 @@ import (
 	"backend_institutions/internal/helper"
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/services"
+	
 	"math"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ func NewStudentController(studentService *services.StudentService, userService *
 	}
 }
 
+
 func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {
@@ -42,6 +44,11 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 	}
 
 	body.Sanitize()
+	course_duration,err:= cl.studentService.GetCourseDurationByFacultyID(body.FacultyID)
+	if body.Semester>course_duration*2{
+		return helper.Error(c, 404, "This particular semester does not contain for the particular department")
+	}
+	
 
 	
 	user, err := cl.userService.GetUserByID(userID)
@@ -63,18 +70,20 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 	}
 
 	student := model.Student{
-		Name:      body.Name,
-		Gender:    body.Gender,
-		FacultyID: body.FacultyID,
-		UserID:    targetUserID,
-		IsActive:  true,
+		Name:        body.Name,
+		Gender:      body.Gender,
+		FacultyID:   body.FacultyID,
+		UserID:      targetUserID,
+		Hosteller:   body.Hosteller,
+		Scholarship: body.Scholorship,
+		MQ:          body.MQ,
+		IsActive:    true,
 	}
 
-	
 	createdStudent, err := cl.studentService.CreateStudentService(
 		userID,
 		&student,
-		CreateStudentDTO,
+		&body,
 	)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
@@ -130,6 +139,7 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	}
 
 	studentID := uint(id)
+	
 
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
@@ -141,6 +151,15 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 		userID,
 		studentID,
 	)
+	FacultyID , _:= cl.studentService.GetUserFacultyID(userID)
+	_,errVal:=cl.studentService.StudentVerification(studentID,FacultyID)
+	if errVal != nil {
+	return helper.Error(
+		c,
+		fiber.StatusInternalServerError,
+		errVal.Error(),
+	)
+}
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
 			return helper.Error(c, 403, err.Error())
@@ -156,6 +175,45 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	)
 }
 
+func (cl *StudentController) VerifyStudentController(
+	c fiber.Ctx,
+) error {
+
+	userID, ok := c.Locals("user_id").(uint)
+
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
+	idStr := c.Params("id")
+
+	id, err := strconv.ParseUint(idStr, 10, 32)
+
+	if err != nil {
+		return helper.Error(c, 400, "invalid student ID")
+	}
+
+	studentID := uint(id)
+
+	err = cl.studentService.UpdateStudentVerified(
+		userID,
+		studentID,
+	)
+
+	if err != nil {
+		return helper.Error(
+			c,
+			fiber.StatusForbidden,
+			err.Error(),
+		)
+	}
+
+	return helper.Success(
+		c,
+		"Student verified successfully",
+		nil,
+	)
+}
 
 
 func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {

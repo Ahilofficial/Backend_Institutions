@@ -270,6 +270,52 @@ func (r *FacultyRepository) GetInstitutionByFacultyID(facultyID uint) (uint, err
 	return institutionID, nil
 }
 
+func (r *FacultyRepository) GetDepartmentFeeByFacultyID(facultyID uint) (float64, error) {
+	var feeAmount float64
+
+	err := r.db.Raw(`
+		SELECT d.fee_amount
+		FROM faculties f
+		JOIN departments d ON f.department_id = d.id
+		WHERE f.id = ?
+		  AND f.deleted_at IS NULL
+		  AND d.deleted_at IS NULL
+		LIMIT 1
+	`, facultyID).Scan(&feeAmount).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	return feeAmount, nil
+}
+
+func (r *FacultyRepository) GetDepartmentFeeAndPaymentIDByFacultyID(facultyID uint) (float64, float64, float64, uint, error) {
+	type Result struct {
+		CollegeAmount float64 `gorm:"column:college_amount"`
+		HostelAmount  float64 `gorm:"column:hostel_amount"`
+		FeeAmount     float64 `gorm:"column:fee_amount"`
+		PaymentID     uint    `gorm:"column:payment_id"`
+	}
+	var res Result
+
+	err := r.db.Raw(`
+		SELECT d.college_amount, d.hostel_amount, d.fee_amount, d.payment_id
+		FROM faculties f
+		JOIN departments d ON f.department_id = d.id
+		WHERE f.id = ?
+		  AND f.deleted_at IS NULL
+		  AND d.deleted_at IS NULL
+		LIMIT 1
+	`, facultyID).Scan(&res).Error
+
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	return res.CollegeAmount, res.HostelAmount, res.FeeAmount, res.PaymentID, nil
+}
+
 func (r *FacultyRepository) FetchByUserID(userID uint) (model.Faculty, error) {
 	var fac model.Faculty
 	err := r.db.Raw("SELECT * FROM faculties WHERE user_id = ? AND deleted_at IS NULL LIMIT 1", userID).Scan(&fac).Error

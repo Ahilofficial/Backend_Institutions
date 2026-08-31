@@ -8,12 +8,14 @@ import (
 )
 
 type CreateStudentDTO struct {
-	Name          string `json:"name"`
-	Gender        string `json:"gender"`
-	FacultyID     uint   `json:"faculty_id"`
-	Rank          uint   `json:"rank"`
-	Hosteller     bool   `json:"Hosteller"`
-	Scholorship   bool   `json:"Scholorship"`
+	Name        string `json:"name"`
+	Gender      string `json:"gender"`
+	FacultyID   uint   `json:"faculty_id"`
+	Semester    uint     		`json:"semester"`
+	
+	Hosteller   bool   `json:"hosteller"`
+	Scholorship bool   `json:"scholorship"`
+	MQ          bool   `json:"mq"`
 }
 
 func (dto *CreateStudentDTO) Sanitize() {
@@ -31,6 +33,9 @@ func (dto *CreateStudentDTO) Validate() error {
 	}
 	if dto.FacultyID == 0 {
 		return errors.New("faculty id is required")
+	}
+	if dto.MQ && dto.Scholorship {
+		return errors.New("management quota student cannot have scholarship")
 	}
 	return nil
 }
@@ -65,14 +70,21 @@ type StudentFacultyDTO struct {
 }
 
 type StudentResponseDTO struct {
-	ID        uint               `json:"id"`
-	Name      string             `json:"name"`
-	Gender    string             `json:"gender"`
-	FacultyID uint               `json:"faculty_id"`
-	UserID    uint               `json:"user_id,omitempty"`
-	IsActive  bool               `json:"is_active"`
-	Faculty   *StudentFacultyDTO `json:"faculty,omitempty"`
-	Fees      []FeesResponseDTO  `json:"fees,omitempty"`
+	ID          uint               `json:"id"`
+	Name        string             `json:"name"`
+	Gender      string             `json:"gender"`
+	FacultyID   uint               `json:"faculty_id"`
+	UserID      uint               `json:"user_id,omitempty"`
+	IsActive    bool               `json:"is_active"`
+	Hosteller   bool               `json:"hosteller"`
+	Scholorship bool               `json:"scholorship"`
+
+	MQ          bool               `json:"mq"`
+	FeeAmount       float64                     `json:"fee_amount"`
+	BaseAmount      float64                     `json:"base_amount"`
+	Faculty         *StudentFacultyDTO          `json:"faculty,omitempty"`
+	Fees            []FeesResponseDTO           `json:"fees,omitempty"`
+	StudentPayments []StudentPaymentResponseDTO `json:"student_payments,omitempty"`
 }
 
 func ToStudentResponseDTO(stud *model.Student) StudentResponseDTO {

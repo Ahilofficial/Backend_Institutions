@@ -20,18 +20,7 @@ func NewFeesController(feesService *services.FeesService) *FeesController {
 	return &FeesController{feesService: feesService}
 }
 
-func (cl *FeesController) GetInactiveFeesController(c fiber.Ctx) error {
-	fees, err := cl.feesService.GetInactiveFeesService()
-	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
 
-	return helper.Success(
-		c,
-		"Inactive fees fetched successfully",
-		dto.ToFeesResponseListDTO(fees),
-	)
-}
 
 func (cl *FeesController) CreateFeesController(c fiber.Ctx) error {
 
@@ -51,18 +40,21 @@ func (cl *FeesController) CreateFeesController(c fiber.Ctx) error {
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
+	TotalAmount:= body.Amount + float64(body.HostelAmount)
 
 	var feeObj = model.Fees{
-		PaymentMode:   body.PaymentMode,
-		TotalAmount:   body.TotalAmount,
-		StudentID:     body.StudentID,
+		// PaymentMode:   body.PaymentMode,
+		TotalAmount:   TotalAmount,
+		DepartmentID:     body.DepartmentID,
 		TotalPaid:     0,
-		PendingAmount: body.TotalAmount,
+		PendingAmount: TotalAmount,
 	}
 
 	fees, err := cl.feesService.CreateFeesService(
 		userID,
 		&feeObj,
+		body.Amount,
+		float64(body.HostelAmount),
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
@@ -330,6 +322,10 @@ func (c *FeesController) CreatePayment(ctx fiber.Ctx) error {
 
 	if err := req.Validate(); err != nil {
 		return helper.Error(ctx, 400, err.Error())
+	}
+	student_id:=c.feesService.GetStudentIDByFeeID(userID)
+	if student_id == 0 {
+		return helper.Error(ctx, 400, "Invalid fee id")
 	}
 
 	payment, err := c.feesService.CreatePayment(

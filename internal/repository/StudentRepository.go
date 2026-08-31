@@ -41,8 +41,8 @@ func (r *StudentRepository) CreateStudent(
 
 	res, err := db.Exec(
 		`INSERT INTO students
-			(name, gender, faculty_id, user_id, created_at, updated_at, is_active)
-		SELECT ?, ?, id, ?, ?, ?, ?
+			(name, gender, hosteller, scholorship, mq, base_amount, fee_amount, faculty_id, user_id, created_at, updated_at, is_active)
+		SELECT ?, ?, ?, ?, ?, ?, ?, id, ?, ?, ?, ?
 		FROM faculties
 		WHERE id = ?
 		  AND deleted_at IS NULL
@@ -55,6 +55,11 @@ func (r *StudentRepository) CreateStudent(
 		  ))`,
 		student.Name,
 		student.Gender,
+		student.Hosteller,
+		student.Scholarship,
+		student.MQ,
+		student.BaseAmount,
+		student.FeeAmount,
 		userIDVal,
 		now,
 		now,
@@ -362,6 +367,44 @@ func (r *StudentRepository) UpdateStudentById(
 	return err
 }
 
+func (r *StudentRepository) StudentVerificationRepo(access model.StudentVerificationAccess)error{
+	
+	err := r.db.Exec(
+    `INSERT INTO student_verification_accesses (student_id, faculty_id)
+     VALUES (?, ?)`,
+    access.StudentID,
+    access.FacultyID,
+).Error
+if err != nil {
+	return err
+}
+
+return err
+}
+
+func (r *StudentRepository) HasStudentVerificationAccess(
+	studentID uint,
+	facultyID uint,
+) (bool, error) {
+
+	var count int64
+
+	err := r.db.Raw(
+		`SELECT COUNT(*)
+		 FROM student_verification_accesses
+		 WHERE student_id = ?
+		 AND faculty_id = ?`,
+		studentID,
+		facultyID,
+	).Scan(&count).Error
+
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 
 
 func (r *StudentRepository) FetchStudentsByPaymentMonth(
@@ -434,6 +477,7 @@ func (r *StudentRepository) FetchNotPaidStudents() ([]model.Student, error) {
 	return r.FetchNotPaidStudentsByMonth(0, 0, "")
 }
 
+
 func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, facultyID uint, month string) ([]model.Student, error) {
 	var students []model.Student
 
@@ -482,6 +526,22 @@ func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, facultyID u
 	return students, nil
 }
 
+
+
+func( r *StudentRepository)GetCourseDurationByFacultyIDRepo(FacultyID uint)(uint,error){
+	var department_id uint
+	var course_duration uint
+	dep_err:=r.db.Raw("SELECT department_id from faculties where id=?",FacultyID).Scan(&department_id).Error
+	if dep_err!=nil{
+		return 0,dep_err
+	}
+	c_error:=r.db.Raw(`select course_duration from department where id =?`,department_id).Scan(&course_duration).Error
+	if c_error!=nil{
+		return 0,c_error
+	}
+
+	return course_duration,nil
+	}
 func (r *StudentRepository) FetchAllStudentsMonthOverview(instID uint, facultyID uint, month string) (dto.MonthlyStudentsOverviewDTO, error) {
 	m := strings.TrimSpace(month)
 
@@ -638,6 +698,37 @@ func (r *StudentRepository) FetchStudentPaginatedWithInstitution(
 }
 
 
+
+func (r *StudentRepository) GetStudentVerificationAccess(
+	studentID uint,
+	facultyID uint,
+	access *model.StudentVerificationAccess,
+) error {
+
+	query := `
+		SELECT is_profile_verified
+		FROM students
+		WHERE id = ?
+		AND faculty_id = ?
+	`
+
+	return r.db.
+		Raw(query, studentID, facultyID).
+		Scan(access).
+		Error
+}
+
+func (r *StudentRepository) UpdateStudentVerified(
+	userID uint,
+) error {
+
+	return r.db.
+		Model(&model.Student{}).
+		Where("user_id = ?", userID).
+		Update("is_profile_verified", true).
+		Error
+}
+
 func (r *StudentRepository) GetInstitutionIDByStudent(
 	studentID uint,
 ) (uint, error) {
@@ -664,4 +755,14 @@ func (r *StudentRepository) GetInstitutionIDByStudent(
 
 func (r *StudentRepository) GetInstitutionByStudentID(studentID uint) (uint, error) {
 	return r.GetInstitutionIDByStudent(studentID)
+}
+
+func (r *StudentRepository) CreateStudentPayment(payment *model.StudentPayment) error {
+	return r.db.Create(payment).Error
+}
+
+func (r *StudentRepository) FetchStudentPaymentsByStudentID(studentID uint) ([]model.StudentPayment, error) {
+	var payments []model.StudentPayment
+	err := r.db.Where("student_id = ? AND deleted_at IS NULL", studentID).Find(&payments).Error
+	return payments, err
 }

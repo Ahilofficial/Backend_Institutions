@@ -9,20 +9,23 @@ import (
 )
 
 type FeesService struct {
-	feesRepo    *repository.FeesRepository
-	studentRepo *repository.StudentRepository
-	userRepo    *repository.UserRepository
+	feesRepo       *repository.FeesRepository
+	studentRepo    *repository.StudentRepository
+	userRepo       *repository.UserRepository
+	departmentRepo *repository.DepartmentRepository
 }
 
 func NewFeesService(
 	feesRepo *repository.FeesRepository,
 	studentRepo *repository.StudentRepository,
-	userRepo    *repository.UserRepository,
+	userRepo *repository.UserRepository,
+	departmentRepo *repository.DepartmentRepository,
 ) *FeesService {
 	return &FeesService{
-		feesRepo:    feesRepo,
-		studentRepo: studentRepo,
-		userRepo:    userRepo,
+		feesRepo:       feesRepo,
+		studentRepo:    studentRepo,
+		userRepo:       userRepo,
+		departmentRepo: departmentRepo,
 	}
 }
 
@@ -50,27 +53,40 @@ func (s *FeesService) checkInstitutionAccess(
 func (s *FeesService) CreateFeesService(
 	userID uint,
 	fee *model.Fees,
+	collegeAmount float64,
+	hostelAmount float64,
 ) (model.Fees, error) {
-
-	if fee.StudentID == 0 {
-		return model.Fees{}, errors.New("student_id is required")
+	if fee.DepartmentID == 0 {
+		return model.Fees{}, errors.New("department_id is required")
+	}
+	if fee.TotalAmount <= 0 {
+		return model.Fees{}, errors.New("amount must be greater than 0")
 	}
 
-	canManage, err := s.userRepo.CanManageStudentFees(userID, fee.StudentID)
+	instID, err := s.departmentRepo.GetInstitutionByDepartmentID(fee.DepartmentID)
 	if err != nil {
-		return model.Fees{}, err
-	}
-	if !canManage {
-		return model.Fees{}, errors.New("access denied: cant create fee for this student")
+		return model.Fees{}, fmt.Errorf("department not found or invalid: %w", err)
 	}
 
-	existingFee, err := s.feesRepo.FetchFeesByStudentID(fee.StudentID)
-	if err == nil && existingFee != nil && existingFee.ID > 0 {
-		return model.Fees{}, errors.New("fee already exists for this student")
+	if err := s.checkInstitutionAccess(userID, instID); err != nil {
+		return model.Fees{}, errors.New("access denied: cannot configure fees for this department")
 	}
+
+	existingFee, err := s.feesRepo.FetchFeeByDepartmentID(fee.DepartmentID)
+	if err == nil && existingFee != nil && existingFee.ID > 0 {
+		return model.Fees{}, errors.New("fee already configured for this department")
+	}
+
+	fee.PendingAmount = fee.TotalAmount
+	fee.TotalPaid = 0
+	
 
 	if err := s.feesRepo.CreateFees(fee); err != nil {
 		return model.Fees{}, err
+	}
+
+	if err := s.departmentRepo.UpdateDepartmentFeeAndPaymentID(fee.DepartmentID, collegeAmount, hostelAmount, fee.TotalAmount, fee.ID); err != nil {
+		return model.Fees{}, fmt.Errorf("fee created but failed to update department: %w", err)
 	}
 
 	return *fee, nil
@@ -171,8 +187,17 @@ func (s *FeesService) DeleteFeesService(
 	return s.feesRepo.DeleteFees(id)
 }
 
-func (s *FeesService) GetInactiveFeesService() ([]model.Fees, error) {
-	return s.feesRepo.FetchInactiveFees()
+
+func (s *FeesService) GetStudentIDByFeeID(userID uint) uint {
+	student_id, err := s.feesRepo.FetchUserStudentID(userID)
+	if err != nil {
+		return 0
+	}
+	fee := model.Fees{
+	StudentID: student_id,
+}
+return fee.StudentID
+	
 }
 
 func (s *FeesService) CreatePayment(

@@ -26,8 +26,8 @@ func (r *DepartmentRepository) CreateDepartment(department *model.Department) er
 
 	res, err := db.Exec(
 		`INSERT INTO departments
-			(department_name, institution_id, created_at, updated_at, is_active)
-		SELECT ?, id, ?, ?, ?
+			(department_name, fee_amount, institution_id, created_at, updated_at, is_active)
+		SELECT ?, ?, id, ?, ?, ?
 		FROM institutions
 		WHERE id = ?
 		  AND deleted_at IS NULL
@@ -40,6 +40,7 @@ func (r *DepartmentRepository) CreateDepartment(department *model.Department) er
 			    AND deleted_at IS NULL
 		  )`,
 		department.DepartmentName,
+		// department.FeeAmount,
 		now,
 		now,
 		true,
@@ -207,10 +208,37 @@ func (r *DepartmentRepository) UpdateDepartmentById(department *model.Department
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE departments SET department_name = ?, updated_at = ? WHERE id = ?",
-		department.DepartmentName, time.Now(), department.ID,
+		"UPDATE departments SET department_name = ?, fee_amount = ?,  WHERE id = ?",
+		department.DepartmentName,  time.Now(), department.ID,
 	)
 	return err
+}
+
+func (r *DepartmentRepository) GetDepartmentFee(departmentID uint) (float64, error) {
+	var feeAmount float64
+	err := r.db.Raw("SELECT fee_amount FROM departments WHERE id = ? AND deleted_at IS NULL LIMIT 1", departmentID).Scan(&feeAmount).Error
+	if err != nil {
+		return 0, err
+	}
+	return feeAmount, nil
+}
+
+func (r *DepartmentRepository) UpdateDepartmentFeeAndPaymentID(departmentID uint, collegeAmount float64, hostelAmount float64, feeAmount float64, paymentID uint) error {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		"UPDATE departments SET college_amount = ?, hostel_amount = ?, fee_amount = ?, payment_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+		collegeAmount, hostelAmount, feeAmount, paymentID, time.Now(), departmentID,
+	)
+	return err
+}
+
+func (r *DepartmentRepository) GetDepartmentByID(departmentID uint) (model.Department, error) {
+	var dept model.Department
+	err := r.db.Where("id = ? AND deleted_at IS NULL", departmentID).First(&dept).Error
+	return dept, err
 }
 
 func (r *DepartmentRepository) GetInstitutionByDepartmentID(

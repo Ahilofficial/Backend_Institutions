@@ -227,7 +227,6 @@ func RegisterRoutes(
 	FeesRoute.Get("", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetAllFeesController)
 	FeesRoute.Get("/all", middleware.RequirePermission(constants.PermissionViewFees), feesController.FetchAllFeesController)
 	FeesRoute.Get("/my-fees", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetMyFeesController)
-	FeesRoute.Get("/inactive", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetInactiveFeesController)
 	FeesRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewIDFees), feesController.GetFeesByIDController)
 	FeesRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateFees), feesController.UpdateFeesController)
 	FeesRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteFees), feesController.DeleteFeesController)
