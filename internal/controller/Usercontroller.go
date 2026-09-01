@@ -3,7 +3,6 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
-	// "backend_institutions/internal/model"
 	"backend_institutions/internal/services"
 	"fmt"
 	"strconv"

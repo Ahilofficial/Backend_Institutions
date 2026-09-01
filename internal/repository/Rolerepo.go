@@ -98,15 +98,12 @@ func (r *RoleRepository) AssignPermissionsToRole(roleID uint, permissionIDs []ui
 }
 
 func (r *RoleRepository) GetRolePermissions(roleID uint) ([]model.Permission, error) {
-	var perms []model.Permission
-	query := `
-		SELECT p.id, p.name 
-		FROM permissions p
-		JOIN role_permissions rp ON rp.permission_id = p.id
-		WHERE rp.role_id = ?
-	`
-	err := r.db.Raw(query, roleID).Scan(&perms).Error
-	return perms, err
+	var role model.Role
+	err := r.db.Preload("Permissions").Where("id = ? AND deleted_at IS NULL", roleID).First(&role).Error
+	if err != nil {
+		return nil, err
+	}
+	return role.Permissions, nil
 }
 
 func (r *RoleRepository) Permissions(search string, page, limit int) ([]model.Permission, int64, error) {
@@ -321,29 +318,10 @@ func (r *RoleRepository) DeleteRolePermission(roleID, permissionID uint) error {
 
 func (r *RoleRepository) GetUserRolesByUserID(userID uint) (*model.User, error) {
 	var user model.User
-	err := r.db.Raw(`
-		SELECT id, name, email, phone, is_active
-		FROM users
-		WHERE id = ? AND deleted_at IS NULL
-	`, userID).Scan(&user).Error
+	err := r.db.Preload("Roles").Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
-
-	var roles []model.Role
-	err = r.db.Raw(`
-		SELECT r.id, r.name
-		FROM roles r
-		INNER JOIN user_roles ur
-			ON ur.role_id = r.id
-		WHERE ur.user_id = ?
-	`, userID).Scan(&roles).Error
-	if err != nil {
-		return nil, err
-	}
-
-	user.Roles = roles
-
 	return &user, nil
 }
 func (r *RoleRepository) FetchingPermissionBasedOnRoleID(roleID uint) ([]model.Permission, error) {

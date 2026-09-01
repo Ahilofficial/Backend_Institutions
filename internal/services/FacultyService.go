@@ -48,13 +48,7 @@ func (s *FacultyService) GetNonPaidStudentsForFacultyService(
 func (s *FacultyService) GetFacultyIDForUserService(
 	userID uint,
 ) (uint, error) {
-
-	facultyID, err := s.userRepo.GetFacultyIDForUser(userID)
-	if err != nil {
-		return 0, err
-	}
-
-	return facultyID, nil
+	return s.userRepo.GetUserFacultyID(userID)
 }
 
 func (s *FacultyService) GetPaidStudentsForFacultyService(
@@ -79,28 +73,49 @@ func (s *FacultyService) GetPaidStudentsForFacultyService(
 
 func (s *FacultyService) CreateFacultyService(
 	userID uint,
-	faculty *model.Faculty,
-
+	body *dto.CreateFacultyDTO,
 ) (model.Faculty, error) {
-	department, err := s.departmentRepo.FetchDepartmentById(faculty.DepartmentID)
+	department, err := s.departmentRepo.FetchDepartmentById(body.DepartmentID)
 	if err != nil || department.ID == 0 {
 		return model.Faculty{}, errors.New("department not found")
 	}
-	
-	
-	existingType := s.userRepo.CheckUserExistingProfileFaculty(userID)
 
+	existingType := s.userRepo.CheckUserExistingProfileFaculty(userID)
 	if !existingType {
-		return model.Faculty{}, errors.New(
-			"user is already registered as a  student",
-		)
+		return model.Faculty{}, errors.New("cannot create faculty profile: user already has a student profile")
 	}
-	if err := s.facultyRepo.CreateFaculty(faculty); err != nil {
+
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		return model.Faculty{}, errors.New("faculty profile already exists for this user")
+	}
+
+	isInstAdmin, assignedInstID, _ := s.userRepo.IsInstitutionAdmin(userID)
+	if isInstAdmin {
+		deptInstID, _ := s.departmentRepo.GetInstitutionByDepartmentID(body.DepartmentID)
+		if assignedInstID > 0 && deptInstID != assignedInstID {
+			return model.Faculty{}, errors.New("Cant able to access other institution")
+		}
+	}
+
+	faculty := model.Faculty{
+		Name:         body.Name,
+		Gender:       body.Gender,
+		JoiningDate:  body.JoiningDate,
+		DepartmentID: body.DepartmentID,
+		UserID:       userID,
+		IsActive:     true,
+	}
+
+	if err := s.facultyRepo.CreateFaculty(&faculty); err != nil {
 		return model.Faculty{}, err
 	}
 
-	
-	return *faculty, nil
+	if faculty.UserID > 0 && faculty.ID > 0 {
+		_ = s.userRepo.UpdateUserFacultyID(faculty.UserID, faculty.ID)
+	}
+
+	return faculty, nil
 }
 
 func (s *FacultyService) GetFacultyService() ([]model.Faculty, error) {

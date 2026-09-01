@@ -3,7 +3,6 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
-	"backend_institutions/internal/model"
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
@@ -35,57 +34,18 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 	}
 
 	var body dto.CreateStudentDTO
-
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
 	body.Sanitize()
-	course_duration, _ := cl.studentService.GetCourseDurationByFacultyID(body.FacultyID)
-	if course_duration > 0 && body.Semester > course_duration*2 {
-		return helper.Error(c, 400, "This particular semester does not contain for the particular department")
-	}
-
-	user, err := cl.userService.GetUserByID(userID)
-	if err != nil || user == nil {
-		return helper.Error(c, 404, "user not found")
-	}
-
-	if user.FacultyID != 0 && body.FacultyID == 0 {
-		body.FacultyID = user.FacultyID
-	}
-
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	var targetUserID uint
-	if user.StudentID == 0 {
-		targetUserID = userID
-	}
-
-	student := model.Student{
-		Name:        body.Name,
-		Gender:      body.Gender,
-		FacultyID:   body.FacultyID,
-		UserID:      targetUserID,
-		Hosteller:   body.Hosteller,
-		Scholarship: body.Scholorship,
-		MQ:          body.MQ,
-		IsActive:    true,
-	}
-
-	createdStudent, err := cl.studentService.CreateStudentService(
-		userID,
-		&student,
-		&body,
-	)
+	createdStudent, err := cl.studentService.CreateStudentService(userID, &body)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
-	}
-
-	if targetUserID != 0 {
-		_ = cl.userService.UpdateStudentID(targetUserID, createdStudent.ID)
 	}
 
 	return helper.Success(
@@ -94,6 +54,7 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 		dto.ToStudentResponseDTO(createdStudent),
 	)
 }
+
 func (cl *StudentController) GetActiveStudentController(c fiber.Ctx) error {
 	student, err := cl.studentService.GetActiveStudentService()
 	if err != nil {
@@ -118,7 +79,7 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	idStr := c.Params("id")
 
 	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
+	if err != nil || id == 0 {
 		return helper.Error(c, 400, "invalid student ID")
 	}
 
@@ -127,10 +88,10 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(studentID)
-	
 	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
+
 	student, err := cl.studentService.GetStudentServiceById(
 		userID,
 		studentID,
@@ -139,19 +100,10 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
 			return helper.Error(c, 403, err.Error())
 		}
-		return helper.Error(c, 404, err.Error())
+		return helper.Error(c, 400, err.Error())
 	}
 	if student == nil {
 		return helper.Error(c, 404, "Student not found")
-	}
-
-	if !student.IsProfileVerified {
-		return helper.Error(c, 400, "Faculty first need to verify your profile")
-	}
-
-	FacultyID, _ := cl.studentService.GetUserFacultyID(userID)
-	if FacultyID > 0 {
-		_, _ = cl.studentService.StudentVerification(studentID, FacultyID)
 	}
 
 	return helper.Success(
@@ -202,7 +154,6 @@ func (cl *StudentController) VerifyStudentController(
 }
 
 func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
-
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {
 		return helper.Error(c, 401, "Invalid user")
@@ -211,18 +162,16 @@ func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 	idParam := c.Params("id")
 
 	id, err := strconv.ParseUint(idParam, 10, 32)
-	if err != nil {
+	if err != nil || id == 0 {
 		return helper.Error(c, 400, "Invalid student ID")
 	}
 
 	var body dto.UpdateStudentDTO
-
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
 	body.Sanitize()
-
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
@@ -234,24 +183,16 @@ func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
 
-	if err := cl.studentService.UpdateStudentService(
+	student, err := cl.studentService.UpdateStudentService(
 		userID,
 		uint(id),
 		&body,
-	); err != nil {
+	)
+	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
 			return helper.Error(c, 403, err.Error())
 		}
 		return helper.Error(c, 400, err.Error())
-	}
-
-	student, err := cl.studentService.GetStudentServiceById(userID, uint(id))
-	if err != nil || student == nil {
-		return helper.Success(
-			c,
-			"Student updated successfully",
-			nil,
-		)
 	}
 
 	return helper.Success(

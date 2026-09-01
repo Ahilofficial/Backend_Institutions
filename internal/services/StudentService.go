@@ -36,60 +36,57 @@ func (s *StudentService) GetUserFacultyID(userID uint) (uint, error) {
 	return s.userRepo.GetUserFacultyID(userID)
 }
 
-// func (s *StudentService) GetUserExistingProfile(userID uint) (string, error) {
-// 	return s.userRepo.CheckUserExistingProfile(userID)
-// }
-
 func (s *StudentService) GetCourseDurationByFacultyID(facultyID uint) (uint, error) {
 	return s.studentRepo.GetCourseDurationByFacultyIDRepo(facultyID)
 }
 
 func (s *StudentService) CreateStudentService(
 	userID uint,
-	student *model.Student,
 	createstudent *dto.CreateStudentDTO,
 ) (*model.Student, error) {
-	faculty, err := s.facultyRepo.FetchFacultyById(student.FacultyID)
+	if createstudent.FacultyID == 0 {
+		userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+		if userFacultyID > 0 {
+			createstudent.FacultyID = userFacultyID
+		} else {
+			return nil, errors.New("faculty id is required")
+		}
+	}
+
+	courseDuration, _ := s.studentRepo.GetCourseDurationByFacultyIDRepo(createstudent.FacultyID)
+	if courseDuration > 0 && createstudent.Semester > courseDuration*2 {
+		return nil, errors.New("This particular semester does not contain for the particular department")
+	}
+
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if user.FacultyID != 0 {
+		return nil, errors.New("user is already registered as a faculty")
+	}
+	if user.StudentID != 0 {
+		return nil, errors.New("student profile already exists for this user")
+	}
+
+	faculty, err := s.facultyRepo.FetchFacultyById(createstudent.FacultyID)
 	if err != nil || faculty.ID == 0 {
 		return nil, errors.New("faculty not found")
 	}
 
-	student.DepartmentID = faculty.DepartmentID
-	if createstudent.Semester > 0 {
-		student.Semester = createstudent.Semester
-	} else if student.Semester == 0 {
-		student.Semester = 1
+	targetSemester := createstudent.Semester
+	if targetSemester == 0 {
+		targetSemester = 1
 	}
-
-	targetUserID := userID
-	if student.UserID > 0 {
-		targetUserID = student.UserID
-	}
-
-	// if targetUserID > 0 {
-	// 	if err := s.userRepo.ValidateUser(targetUserID); err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	existingType, err := s.userRepo.CheckUserExistingProfile(targetUserID)
-	// 	if err == nil && existingType != "" {
-	// 		return nil, errors.New("user is already registered as a " + existingType)
-	// 	}
-	// }
-
-	student.UserID = targetUserID
-	student.Hosteller = createstudent.Hosteller
 
 	if createstudent.MQ && createstudent.Scholorship {
 		return nil, errors.New("management quota student cannot have scholarship")
 	}
 
-	student.MQ = createstudent.MQ
-	student.Scholarship = createstudent.Scholorship
-
-	deptFee, err := s.feesRepo.GetDepartmentFeeBySemester(student.DepartmentID, student.Semester)
+	deptFee, err := s.feesRepo.GetDepartmentFeeBySemester(faculty.DepartmentID, targetSemester)
 	if err != nil || deptFee == nil {
-		return nil, fmt.Errorf("fee template not configured for department ID %d and semester %d; please configure department fees first", student.DepartmentID, student.Semester)
+		return nil, fmt.Errorf("fee template not configured for department ID %d and semester %d; please configure department fees first", faculty.DepartmentID, targetSemester)
 	}
 
 	collegeAmount := deptFee.CollegeAmount
@@ -98,35 +95,50 @@ func (s *StudentService) CreateStudentService(
 	if baseFee <= 0 {
 		baseFee = collegeAmount + hostelAmount
 	}
-	student.BaseAmount = baseFee
 
 	var finalTuitionFee float64
 	var finalHostelFee float64
 
-	if student.MQ {
+	if createstudent.MQ {
 		finalTuitionFee = collegeAmount + (collegeAmount * 0.50)
-		if student.Hosteller {
+		if createstudent.Hosteller {
 			finalHostelFee = hostelAmount + (hostelAmount * 0.25)
 		} else {
 			finalHostelFee = 0
 		}
-	} else if student.Scholarship {
+	} else if createstudent.Scholorship {
 		finalTuitionFee = collegeAmount - (collegeAmount * 0.25)
-		if student.Hosteller {
+		if createstudent.Hosteller {
 			finalHostelFee = hostelAmount
 		} else {
 			finalHostelFee = 0
 		}
 	} else {
 		finalTuitionFee = collegeAmount
-		if student.Hosteller {
+		if createstudent.Hosteller {
 			finalHostelFee = hostelAmount
 		} else {
 			finalHostelFee = 0
 		}
 	}
 
-	student.FeeAmount = finalTuitionFee + finalHostelFee
+	finalFeeAmount := finalTuitionFee + finalHostelFee
+
+	student := model.Student{
+		Name:         createstudent.Name,
+		Gender:       createstudent.Gender,
+		FacultyID:    createstudent.FacultyID,
+		DepartmentID: faculty.DepartmentID,
+		UserID:       userID,
+		Semester:     targetSemester,
+		Hosteller:    createstudent.Hosteller,
+		Scholarship:  createstudent.Scholorship,
+		MQ:           createstudent.MQ,
+		BaseAmount:   baseFee,
+		FeeAmount:    finalFeeAmount,
+		IsActive:     true,
+		Pending:      true,
+	}
 
 	initialFee := model.Fees{
 		DepartmentID:  student.DepartmentID,
@@ -137,12 +149,14 @@ func (s *StudentService) CreateStudentService(
 		IsActive:      true,
 	}
 
-	if err := s.studentRepo.CreateStudentWithFeeTx(student, &initialFee); err != nil {
+	if err := s.studentRepo.CreateStudentWithFeeTx(&student, &initialFee); err != nil {
 		return nil, err
 	}
 
+	_ = s.userRepo.UpdateUserStudentID(userID, student.ID)
+
 	student.Fees = append(student.Fees, initialFee)
-	return student, nil
+	return &student, nil
 }
 
 
@@ -269,34 +283,22 @@ func (s *StudentService) GetStudentServiceById(
 	}
 
 	userStudentID, err := s.userRepo.GetUserStudentID(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	if userStudentID != 0 {
-
+	if err == nil && userStudentID > 0 {
 		if userStudentID != id {
-			return nil, errors.New(
-				"access denied: you can only access your own student profile",
-			)
+			return nil, errors.New("access denied: you can only access your own student profile")
 		}
-
+		if !student.IsProfileVerified {
+			return nil, errors.New("Faculty first need to verify your profile")
+		}
 		return &student, nil
 	}
 
 	userFacultyID, err := s.userRepo.GetUserFacultyID(userID)
-	if err != nil {
-		return nil, err
-	}
-
-	if userFacultyID != 0 {
-
+	if err == nil && userFacultyID > 0 {
 		if student.FacultyID != userFacultyID {
-			return nil, errors.New(
-				"access denied: student does not belong to your faculty",
-			)
+			return nil, errors.New("access denied: student does not belong to your faculty")
 		}
-
+		_, _ = s.StudentVerification(id, userFacultyID)
 		return &student, nil
 	}
 
@@ -351,29 +353,28 @@ func (s *StudentService) UpdateStudentService(
 	userID uint,
 	id uint,
 	req *dto.UpdateStudentDTO,
-) error {
+) (*model.Student, error) {
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userStudentID, _ := s.userRepo.GetUserStudentID(userID)
-	if userStudentID > 0 && userStudentID == id {
-		student.Name = req.Name
-		student.Gender = req.Gender
-		return s.studentRepo.UpdateStudentById(&student)
+	if userStudentID > 0 && userStudentID != id {
+		return nil, errors.New("access denied: you can only update your own profile")
 	}
 
 	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	if userFacultyID > 0 && student.FacultyID == userFacultyID {
-		student.Name = req.Name
-		student.Gender = req.Gender
-		return s.studentRepo.UpdateStudentById(&student)
+	if userFacultyID > 0 && student.FacultyID != userFacultyID {
+		return nil, errors.New("access denied: student does not belong to your faculty")
 	}
 
 	student.Name = req.Name
 	student.Gender = req.Gender
-	return s.studentRepo.UpdateStudentById(&student)
+	if err := s.studentRepo.UpdateStudentById(&student); err != nil {
+		return nil, err
+	}
+	return &student, nil
 }
 
 func (s *StudentService) GetInstitutionIDForUserService(studentID uint) uint {

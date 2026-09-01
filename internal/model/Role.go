@@ -15,4 +15,5 @@ type Role struct {
 	DeletedAt gorm.DeletedAt `json:"-"`
 
 	Permissions []Permission `gorm:"many2many:role_permissions" json:"permissions,omitempty"`
+	Menus       []Menu       `gorm:"many2many:role_menus" json:"menus,omitempty"`
 }

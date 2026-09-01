@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"backend_institutions/internal/database"
 	"backend_institutions/internal/model"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -16,48 +16,29 @@ func NewMenuRepository(db *gorm.DB) *MenuRepository {
 }
 
 func (r *MenuRepository) GetMenusByUser(userID uint) ([]model.Menu, error) {
-	var isSuperAdmin bool
-	_ = database.DB.Raw(`
-		SELECT EXISTS(
-			SELECT 1 FROM user_roles ur 
-			JOIN roles r ON r.id = ur.role_id 
-			WHERE ur.user_id = ? AND LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin')
-		)
-	`, userID).Scan(&isSuperAdmin)
+	var user model.User
+	if err := r.db.Preload("Roles.Menus").Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
 
-	if isSuperAdmin {
-		var menus []model.Menu
-		err := database.DB.Raw("SELECT id, name, route, icon, parent_id FROM menus ORDER BY id").Scan(&menus).Error
-		return menus, err
+	for _, role := range user.Roles {
+		if strings.EqualFold(role.Name, "super admin") || strings.EqualFold(role.Name, "super_admin") || strings.EqualFold(role.Name, "superadmin") {
+			var allMenus []model.Menu
+			err := r.db.Order("id ASC").Find(&allMenus).Error
+			return allMenus, err
+		}
+	}
+
+	menuMap := make(map[uint]model.Menu)
+	for _, role := range user.Roles {
+		for _, m := range role.Menus {
+			menuMap[m.ID] = m
+		}
 	}
 
 	var menus []model.Menu
-
-	query := `
-	SELECT DISTINCT
-		m.id,
-		m.name,
-		m.route,
-		m.icon,
-		m.parent_id
-	FROM menus m
-	INNER JOIN role_menus rm
-		ON rm.menu_id = m.id
-	INNER JOIN user_roles ur
-		ON ur.role_id = rm.role_id
-	WHERE ur.user_id = ?
-	ORDER BY
-		CASE
-			WHEN m.parent_id IS NULL THEN m.id
-			ELSE m.parent_id
-		END,
-		m.id
-	`
-
-	err := database.DB.Raw(query, userID).Scan(&menus).Error
-
-	if err != nil {
-		return nil, err
+	for _, m := range menuMap {
+		menus = append(menus, m)
 	}
 
 	return menus, nil

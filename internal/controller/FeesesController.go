@@ -272,16 +272,11 @@ func (cl *FeesController) CreatePayment(c fiber.Ctx) error {
 
 	payment, err := cl.feesService.CreatePayment(userID, &req)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") || strings.Contains(strings.ToLower(err.Error()), "cant pay fees for other student") {
 			return helper.Error(c, 403, err.Error())
 		}
 		return helper.Error(c, 400, err.Error())
 	}
-	loggined_student_id:=cl.feesService.GetLogginedStudentID(userID)
-	if loggined_student_id!=req.StudentID{
-		return helper.Error(c, 403, "cant pay fees for other student")
-	}
-	
 
 	return helper.Success(c, "Payment created successfully", payment)
 }

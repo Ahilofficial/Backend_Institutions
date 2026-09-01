@@ -345,42 +345,36 @@ func (r *FeesRepository) UpdateFeesById(fees *model.Fees) error {
 }
 
 func (r *FeesRepository) RecalculateFeeTotals(feeID uint, latestPaymentMode string) error {
-	db, err := r.db.DB()
-	if err != nil {
+	var payments []model.Payment
+	if err := r.db.Where("fee_id = ? AND deleted_at IS NULL", feeID).Find(&payments).Error; err != nil {
 		return err
 	}
 
 	var totalPaid float64
-	query := `SELECT COALESCE(SUM(amount_paid), 0) FROM payments WHERE fee_id = ? AND deleted_at IS NULL`
-	if err := db.QueryRow(query, feeID).Scan(&totalPaid); err != nil {
+	for _, p := range payments {
+		totalPaid += p.AmountPaid
+	}
+
+	var fee model.Fees
+	if err := r.db.Where("id = ? AND deleted_at IS NULL", feeID).First(&fee).Error; err != nil {
 		return err
 	}
 
-	var totalAmount float64
-	if err := db.QueryRow(`SELECT total_amount FROM fees WHERE id = ?`, feeID).Scan(&totalAmount); err != nil {
-		return err
-	}
-
-	pendingAmount := totalAmount - totalPaid
+	pendingAmount := fee.TotalAmount - totalPaid
 	if pendingAmount < 0 {
 		pendingAmount = 0
 	}
 
+	updates := map[string]interface{}{
+		"total_paid":     totalPaid,
+		"pending_amount": pendingAmount,
+		"updated_at":     time.Now(),
+	}
 	if latestPaymentMode != "" {
-		_, err = db.Exec(`
-			UPDATE fees
-			SET total_paid = ?, pending_amount = ?, payment_mode = ?, updated_at = ?
-			WHERE id = ?
-		`, totalPaid, pendingAmount, latestPaymentMode, time.Now(), feeID)
-	} else {
-		_, err = db.Exec(`
-			UPDATE fees
-			SET total_paid = ?, pending_amount = ?, updated_at = ?
-			WHERE id = ?
-		`, totalPaid, pendingAmount, time.Now(), feeID)
+		updates["payment_mode"] = latestPaymentMode
 	}
 
-	return err
+	return r.db.Model(&model.Fees{}).Where("id = ? AND deleted_at IS NULL", feeID).Updates(updates).Error
 }
 
 func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, error) {
@@ -401,21 +395,13 @@ func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, err
 }
 
 func (r *FeesRepository) GetInstitutionByFeeID(feeID uint) (uint, error) {
-	var institutionID uint
-
-	err := r.db.Raw(`
-		SELECT d.institution_id
-		FROM fees fe
-		JOIN departments d ON fe.department_id = d.id
-		WHERE fe.id = ?
-		  AND fe.deleted_at IS NULL
-		  AND d.deleted_at IS NULL
-		LIMIT 1
-	`, feeID).Scan(&institutionID).Error
-
+	var fee model.Fees
+	err := r.db.
+		Preload("Department").
+		Where("id = ? AND deleted_at IS NULL", feeID).
+		First(&fee).Error
 	if err != nil {
 		return 0, err
 	}
-
-	return institutionID, nil
+	return fee.Department.InstitutionID, nil
 }

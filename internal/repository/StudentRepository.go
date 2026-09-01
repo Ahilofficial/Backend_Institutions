@@ -195,23 +195,12 @@ func (r *StudentRepository) FetchByUserID(userID uint) (model.Student, error) {
 func (r *StudentRepository) ExistsByUserID(
 	userID uint,
 ) (bool, error) {
-
-	var exists bool
-
-	result := r.db.Raw(`
-		SELECT EXISTS(
-			SELECT 1
-			FROM students
-			WHERE user_id = ?
-			  AND deleted_at IS NULL
-		)
-	`, userID).Scan(&exists)
-
-	if result.Error != nil {
-		return false, result.Error
+	var count int64
+	err := r.db.Model(&model.Student{}).Where("user_id = ? AND deleted_at IS NULL", userID).Count(&count).Error
+	if err != nil {
+		return false, err
 	}
-
-	return exists, nil
+	return count > 0, nil
 }
 
 func (r *StudentRepository) FetchStudent() ([]model.Student, error) {
@@ -304,20 +293,15 @@ func (r *StudentRepository) FetchStudentById(
 }
 
 func (r *StudentRepository) GetInstitutionIDForUserRepo(studentID uint) uint {
-	var students_institution_id uint
-	err := r.db.Raw(`
-		SELECT d.institution_id
-		FROM students s
-		JOIN faculties f ON f.id = s.faculty_id
-		JOIN departments d ON d.id = f.department_id
-		WHERE s.id = ?
-	`, studentID).Scan(&students_institution_id).Error
-
+	var student model.Student
+	err := r.db.
+		Preload("Faculty.Department").
+		Where("id = ? AND deleted_at IS NULL", studentID).
+		First(&student).Error
 	if err != nil {
 		return 0
 	}
-
-	return students_institution_id
+	return student.Faculty.Department.InstitutionID
 }
 
 func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
@@ -426,72 +410,74 @@ func (r *StudentRepository) StudentVerificationRepo(access model.StudentVerifica
 		return nil
 	}
 
-	err := r.db.Exec(
-		`INSERT INTO student_verification_accesses (student_id, faculty_id, created_at, updated_at)
-     VALUES (?, ?, NOW(), NOW())
-     ON DUPLICATE KEY UPDATE updated_at = NOW()`,
-		access.StudentID,
-		access.FacultyID,
-	).Error
-	return err
+	var existing model.StudentVerificationAccess
+	err := r.db.Where("student_id = ? AND faculty_id = ?", access.StudentID, access.FacultyID).First(&existing).Error
+	if err == nil && existing.StudentID > 0 {
+		return r.db.Model(&existing).Where("student_id = ? AND faculty_id = ?", access.StudentID, access.FacultyID).Update("updated_at", time.Now()).Error
+	}
+	return r.db.Create(&access).Error
 }
 
 func (r *StudentRepository) HasStudentVerificationAccess(
 	studentID uint,
 	facultyID uint,
 ) (bool, error) {
-
 	var count int64
-
-	err := r.db.Raw(
-		`SELECT COUNT(*)
-		 FROM student_verification_accesses
-		 WHERE student_id = ?
-		 AND faculty_id = ?`,
-		studentID,
-		facultyID,
-	).Scan(&count).Error
-
+	err := r.db.Model(&model.StudentVerificationAccess{}).
+		Where("student_id = ? AND faculty_id = ?", studentID, facultyID).
+		Count(&count).Error
 	if err != nil {
 		return false, err
 	}
-
 	return count > 0, nil
 }
 
-func (r *StudentRepository) GetCourseDurationByFacultyIDRepo(FacultyID uint) (uint, error) {
-	var courseDuration uint
-	err := r.db.Raw(`
-		SELECT d.course_duration
-		FROM faculties f
-		JOIN departments d ON f.department_id = d.id
-		WHERE f.id = ? AND f.deleted_at IS NULL AND d.deleted_at IS NULL
-		LIMIT 1
-	`, FacultyID).Scan(&courseDuration).Error
+func (r *StudentRepository) GetCourseDurationByFacultyIDRepo(facultyID uint) (uint, error) {
+	var faculty model.Faculty
+	err := r.db.
+		Preload("Department").
+		Where("id = ? AND deleted_at IS NULL", facultyID).
+		First(&faculty).Error
 	if err != nil {
 		return 0, err
 	}
-
-	return courseDuration, nil
+	return faculty.Department.CourseDuration, nil
 }
 
 func (r *StudentRepository) FetchStudentByInstitution(instID uint) ([]model.Student, error) {
 	var students []model.Student
 
 	dbQuery := r.db.Model(&model.Student{}).
-		Joins("JOIN faculties f ON f.id = students.faculty_id").
-		Joins("JOIN departments d ON d.id = f.department_id").
-		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
+		Where("deleted_at IS NULL")
 
 	if instID > 0 {
-		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
+		var depts []model.Department
+		_ = r.db.Where("institution_id = ? AND deleted_at IS NULL", instID).Find(&depts).Error
+		var deptIDs []uint
+		for _, d := range depts {
+			deptIDs = append(deptIDs, d.ID)
+		}
+		if len(deptIDs) > 0 {
+			var facs []model.Faculty
+			_ = r.db.Where("department_id IN ? AND deleted_at IS NULL", deptIDs).Find(&facs).Error
+			var facIDs []uint
+			for _, f := range facs {
+				facIDs = append(facIDs, f.ID)
+			}
+			if len(facIDs) > 0 {
+				dbQuery = dbQuery.Where("faculty_id IN ?", facIDs)
+			} else {
+				return nil, nil
+			}
+		} else {
+			return nil, nil
+		}
 	}
 
 	err := dbQuery.
 		Preload("Faculty").
 		Preload("Fees").
 		Preload("Fees.Payments").
-		Distinct().
 		Find(&students).Error
 
 	return students, err
@@ -510,17 +496,35 @@ func (r *StudentRepository) FetchStudentPaginatedWithInstitution(
 
 	query := r.db.
 		Model(&model.Student{}).
-		Joins("JOIN faculties f ON f.id = students.faculty_id").
-		Joins("JOIN departments d ON d.id = f.department_id").
-		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
+		Where("deleted_at IS NULL")
 
 	if instID > 0 {
-		query = query.Where("d.institution_id = ?", instID)
+		var depts []model.Department
+		_ = r.db.Where("institution_id = ? AND deleted_at IS NULL", instID).Find(&depts).Error
+		var deptIDs []uint
+		for _, d := range depts {
+			deptIDs = append(deptIDs, d.ID)
+		}
+		if len(deptIDs) > 0 {
+			var facs []model.Faculty
+			_ = r.db.Where("department_id IN ? AND deleted_at IS NULL", deptIDs).Find(&facs).Error
+			var facIDs []uint
+			for _, f := range facs {
+				facIDs = append(facIDs, f.ID)
+			}
+			if len(facIDs) > 0 {
+				query = query.Where("faculty_id IN ?", facIDs)
+			} else {
+				return nil, 0, nil
+			}
+		} else {
+			return nil, 0, nil
+		}
 	}
 
 	if search != "" {
 		searchPattern := "%" + search + "%"
-		query = query.Where(`(students.name LIKE ? OR students.gender LIKE ?)`, searchPattern, searchPattern)
+		query = query.Where(`(name LIKE ? OR gender LIKE ?)`, searchPattern, searchPattern)
 	}
 
 	if err := query.Count(&total).Error; err != nil {
@@ -549,27 +553,22 @@ func (r *StudentRepository) GetStudentVerificationAccess(
 	facultyID uint,
 	access *model.StudentVerificationAccess,
 ) error {
-
-	query := `
-		SELECT is_profile_verified
-		FROM students
-		WHERE id = ?
-		AND faculty_id = ?
-	`
-
-	return r.db.
-		Raw(query, studentID, facultyID).
-		Scan(access).
-		Error
+	var student model.Student
+	err := r.db.Where("id = ? AND faculty_id = ? AND deleted_at IS NULL", studentID, facultyID).First(&student).Error
+	if err != nil {
+		return err
+	}
+	access.StudentID = student.ID
+	access.FacultyID = student.FacultyID
+	return nil
 }
 
 func (r *StudentRepository) UpdateStudentVerified(
 	userID uint,
 ) error {
-
 	return r.db.
 		Model(&model.Student{}).
-		Where("user_id = ?", userID).
+		Where("user_id = ? AND deleted_at IS NULL", userID).
 		Update("is_profile_verified", true).
 		Error
 }
@@ -577,25 +576,15 @@ func (r *StudentRepository) UpdateStudentVerified(
 func (r *StudentRepository) GetInstitutionIDByStudent(
 	studentID uint,
 ) (uint, error) {
-
-	var institutionID uint
-
-	err := r.db.Raw(`
-		SELECT d.institution_id
-		FROM students s
-		JOIN faculties f
-			ON s.faculty_id = f.id
-		JOIN departments d
-			ON f.department_id = d.id
-		WHERE s.id = ?
-		  AND s.deleted_at IS NULL
-	`, studentID).Scan(&institutionID).Error
-
+	var student model.Student
+	err := r.db.
+		Preload("Faculty.Department").
+		Where("id = ? AND deleted_at IS NULL", studentID).
+		First(&student).Error
 	if err != nil {
 		return 0, err
 	}
-
-	return institutionID, nil
+	return student.Faculty.Department.InstitutionID, nil
 }
 
 func (r *StudentRepository) GetInstitutionByStudentID(studentID uint) (uint, error) {
