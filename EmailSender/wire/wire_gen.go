@@ -11,8 +11,6 @@ import (
 	"backend_institutions/EmailSender/service"
 )
 
-// Injectors from wire.go:
-
 func InitializeNotificationService() (*service.NotificationService, error) {
 	emailRepository := repository.NewEmailRepository()
 	notificationService := service.NewNotificationService(emailRepository)

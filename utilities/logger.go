@@ -56,7 +56,6 @@ Response:
 		string(responseBody),
 	)
 
-	// fmt.Print(logContent)
 	_, err = file.WriteString(logContent)
 	if err != nil {
 		fmt.Println("Cant able to write the data inside the log")
@@ -95,7 +94,6 @@ func WriteEmailLog(to, subject string, success bool, errorMsg string) error {
 		detail,
 	)
 
-	// fmt.Print(logEntry)
 	_, err = file.WriteString(logEntry)
 	if err != nil {
 		fmt.Println("Cant able to write the data inside the log")

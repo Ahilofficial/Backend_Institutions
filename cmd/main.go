@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -39,7 +38,6 @@ func main() {
 		&model.StudentPayment{},
 		&model.Institution_Admins{},
 		&model.StudentVerificationAccess{},
-		&model.SemesterFee{},
 	)
 	if err != nil {
 		log.Fatal(err)

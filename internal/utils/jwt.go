@@ -7,12 +7,11 @@ import (
 	"os"
 	"strings"
 	"time"
-
 	"github.com/golang-jwt/jwt/v5"
 )
 
 func GetJWTSecret() []byte {
-	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		secret = "supersecretkey"
 	}

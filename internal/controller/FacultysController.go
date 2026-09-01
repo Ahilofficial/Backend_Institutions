@@ -7,14 +7,12 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
-	"strings"
-
 	"github.com/gofiber/fiber/v3"
 )
 
 type FacultyController struct {
-	facultyService *services.FacultyService
-	userService    *services.UserService
+	facultyService   *services.FacultyService
+	userService      *services.UserService
 	instituteService services.InstituteService
 }
 
@@ -24,21 +22,59 @@ func NewFacultyController(
 	instituteService *services.InstituteService,
 ) *FacultyController {
 	return &FacultyController{
-		facultyService: facultyService,
-		userService:    userService,
+		facultyService:   facultyService,
+		userService:      userService,
 		instituteService: *instituteService,
 	}
+}
+func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
+	idStr := c.Params("id")
+
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return helper.Error(c, 400, "invalid faculty ID")
+	}
+
+	facultyID := uint(id)
+
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && (checking_faculty_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
+
+	faculty, err := cl.facultyService.GetFacultyServiceById(
+		userID,
+		facultyID,
+		
+	)
+	if err != nil {
+		return helper.Error(c, 404, err.Error())
+	}
+
+	return helper.Success(
+		c,
+		"Faculty fetched successfully",
+		dto.ToFacultyResponseDTO(faculty),
+	)
 }
 
 func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 
-	
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {
 		return helper.Error(c, 401, "user not authenticated")
 	}
 
 	
+	
+   
 	var body dto.CreateFacultyDTO
 
 	if err := c.Bind().Body(&body); err != nil {
@@ -49,16 +85,14 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 		)
 	}
 
-	// Sanitize input.
 	body.Sanitize()
 
-	// Validate input.
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
 	user, err := cl.userService.GetUserByID(userID)
-	if err != nil || user == nil {
+	if err != nil  {
 		return helper.Error(c, 404, "user not found")
 	}
 
@@ -66,6 +100,8 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 	if user.FacultyID == 0 {
 		targetUserID = userID
 	}
+
+	
 
 	createdFaculty, err := cl.facultyService.CreateFacultyService(
 		userID,
@@ -77,6 +113,7 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 			UserID:       targetUserID,
 			IsActive:     true,
 		},
+	
 	)
 
 	if err != nil {
@@ -93,26 +130,16 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 		dto.ToFacultyResponseDTO(&createdFaculty),
 	)
 }
+
+
 func (cl *FacultyController) GetAllFacultiesController(c fiber.Ctx) error {
-	search := c.Query("search")
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
 
-	page := 1
-	limit := 10
+	page,err := strconv.Atoi(pageStr)
+	limit,err := strconv.Atoi(limitStr)
 
-	if pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-	}
-
-	faculties, total, err := cl.facultyService.GetFacultyServicePaginated(search, page, limit)
+	faculties, total, err := cl.facultyService.GetFacultyServicePaginated(page,limit)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -132,48 +159,7 @@ func (cl *FacultyController) GetAllFacultiesController(c fiber.Ctx) error {
 	)
 }
 
-func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok || userID == 0 {
-		return helper.Error(c, 401, "Invalid user")
-	}
 
-	// Get faculty ID from URL
-	idStr := c.Params("id")
-
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		return helper.Error(c, 400, "invalid faculty ID")
-	}
-
-	facultyID := uint(id)
-	
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// Fetch faculty
-	faculty, err := cl.facultyService.GetFacultyServiceById(
-		userID,
-		facultyID,
-	)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
-			return helper.Error(c, 403, err.Error())
-		}
-
-		return helper.Error(c, 404, err.Error())
-	}
-
-	return helper.Success(
-		c,
-		"Faculty fetched successfully",
-		dto.ToFacultyResponseDTO(faculty),
-	)
-}
 
 func (cl *FacultyController) GetLoggedInFacultyController(c fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(uint)
@@ -191,7 +177,7 @@ func (cl *FacultyController) GetLoggedInFacultyController(c fiber.Ctx) error {
 }
 
 func (cl *FacultyController) GetLoggedInFacultyStudentsController(c fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(uint)
+	userID:= c.Locals("user_id").(uint)
 
 	students, err := cl.facultyService.GetLoggedInFacultyStudents(userID)
 	if err != nil {
@@ -205,41 +191,15 @@ func (cl *FacultyController) GetLoggedInFacultyStudentsController(c fiber.Ctx) e
 	)
 }
 
-func (cl *FacultyController) GetDeletedFacultiesController(c fiber.Ctx) error {
-	faculties, err := cl.facultyService.GetFacultyServiceDeleted()
-	if err != nil {
-		return helper.Error(c, 500, err.Error())
-	}
 
-	return helper.Success(
-		c,
-		"Deleted faculties fetched successfully",
-		dto.ToFacultyResponseListDTO(faculties),
-	)
-}
-
-func (cl *FacultyController) GetActiveFacultyController(c fiber.Ctx) error {
-	faculty, err := cl.facultyService.GetActiveFacultyService()
-	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
-
-	return helper.Success(
-		c,
-		"Active faculty fetched successfully",
-		dto.ToFacultyResponseDTO(&faculty),
-	)
-}
 
 func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 
-	// Logged-in user ID
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
-	// Faculty ID to update
 	idParam := c.Params("id")
 
 	id, err := strconv.ParseUint(idParam, 10, 32)
@@ -247,29 +207,19 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid faculty ID")
 	}
 
-	// Check logged-in user's role
-	allowed, err := cl.userService.CheckUserRole(userID, "faculty")
-	if err != nil {
-		return helper.Error(c, 500, "Failed to check user role")
-	}
-
-	if !allowed {
-		return helper.Error(c, 403, "You are not authorized to update faculty")
-	}
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(uint(id))
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
-	// Request body
+	
 	var body dto.UpdateFacultyDTO
 
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "Invalid request body")
 	}
 
-	// Update faculty
 	err = cl.facultyService.UpdateFacultyService(
 		userID,
 		uint(id),
@@ -284,6 +234,26 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 		"Faculty updated successfully",
 		nil,
 	)
+}
+
+func(cl *FacultyController) GetPaidStudentsForFacultyController(c fiber.Ctx) error {
+	user_id:=c.Locals("user_id").(uint)
+	faculty_id,err:=cl.facultyService.GetFacultyIDForUserService(user_id)
+	paid_students,err:=cl.facultyService.GetPaidStudentsForFacultyService(faculty_id)
+	if err!=nil{
+		return helper.Error(c, 500, err.Error())
+	}
+	return helper.Success(c, "Paid students fetched successfully", dto.ToStudentResponseListDTO(paid_students))
+}
+
+func(cl *FacultyController) GetNonPaidStudentsForFacultyController(c fiber.Ctx) error {
+	user_id:=c.Locals("user_id").(uint)
+	faculty_id,err:=cl.facultyService.GetFacultyIDForUserService(user_id)
+	non_paid_students,err:=cl.facultyService.GetNonPaidStudentsForFacultyService(faculty_id)
+	if err!=nil{
+		return helper.Error(c, 500, err.Error())
+	}
+	return helper.Success(c, "Non-paid students fetched successfully", dto.ToStudentResponseListDTO(non_paid_students))
 }
 
 func (cl *FacultyController) DeleteFacultyController(c fiber.Ctx) error {
@@ -302,7 +272,7 @@ func (cl *FacultyController) DeleteFacultyController(c fiber.Ctx) error {
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(uint(id))
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
+	if is_inst_admin && (checking_faculty_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
 
@@ -310,11 +280,6 @@ func (cl *FacultyController) DeleteFacultyController(c fiber.Ctx) error {
 		userID,
 		uint(id),
 	); err != nil {
-
-		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
-			return helper.Error(c, 403, err.Error())
-		}
-
 		return helper.Error(c, 400, err.Error())
 	}
 
@@ -322,18 +287,5 @@ func (cl *FacultyController) DeleteFacultyController(c fiber.Ctx) error {
 		c,
 		"Faculty deleted successfully",
 		nil,
-	)
-}
-
-func (cl *FacultyController) FetchAllFacultiesController(c fiber.Ctx) error {
-	faculties, err := cl.facultyService.GetFacultyService()
-	if err != nil {
-		return helper.Error(c, 500, err.Error())
-	}
-
-	return helper.Success(
-		c,
-		"All faculties fetched successfully",
-		dto.ToFacultyResponseListDTO(faculties),
 	)
 }

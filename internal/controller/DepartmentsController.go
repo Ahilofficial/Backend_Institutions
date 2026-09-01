@@ -7,55 +7,29 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
-	"strings"
-
 	"github.com/gofiber/fiber/v3"
 )
 
 type DepartmentController struct {
 	departmentService *services.DepartmentService
-	instituteService *services.InstituteService
-	facultyService *services.FacultyService
+	instituteService  *services.InstituteService
+	facultyService    *services.FacultyService
 }
 
-func NewDepartmentController(departmentService *services.DepartmentService,instituteService *services.InstituteService , facultyService *services.FacultyService) *DepartmentController {
+func NewDepartmentController(departmentService *services.DepartmentService, instituteService *services.InstituteService, facultyService *services.FacultyService) *DepartmentController {
 	return &DepartmentController{
 		departmentService: departmentService,
-		instituteService: instituteService,
-		facultyService: facultyService,
+		instituteService:  instituteService,
+		facultyService:    facultyService,
 	}
 }
 
-func (cl *DepartmentController) GetActiveDepartmentController(c fiber.Ctx) error {
-	department, err := cl.departmentService.GetActiveDepartmentService()
-	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
 
-	return helper.Success(
-		c,
-		"Active department fetched successfully",
-		dto.ToDepartmentResponseDTO(&department),
-	)
-}
-
-func (cl *DepartmentController) GetInactiveDepartmentController(c fiber.Ctx) error {
-	department, err := cl.departmentService.GetInactiveDepartmentService()
-	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
-
-	return helper.Success(
-		c,
-		"Inactive department fetched successfully",
-		dto.ToDepartmentResponseDTO(&department),
-	)
-}
 
 func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 
 	userID, ok := c.Locals("user_id").(uint)
-	
+
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
@@ -73,16 +47,15 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 	}
 
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_user_institution_id == 0 || checking_user_institution_id != body.InstitutionID) {
+	userInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	if is_inst_admin && ( body.InstitutionID != userInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
 
 	department := model.Department{
 		DepartmentName: body.DepartmentName,
-		// FeeAmount:      body.FeeAmount,
-		InstitutionID:  body.InstitutionID,
-		IsActive:       true,
+		InstitutionID: body.InstitutionID,
+		IsActive:      true,
 	}
 
 	createdDept, err := cl.departmentService.AddDepartmentService(
@@ -90,9 +63,6 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 		&department,
 	)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "access") || strings.Contains(strings.ToLower(err.Error()), "denied") {
-			return helper.Error(c, 403, "Cant able to access other institution")
-		}
 
 		return helper.Error(c, 400, err.Error())
 	}
@@ -105,25 +75,14 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 }
 
 func (cl *DepartmentController) GetAllDepartmentsController(c fiber.Ctx) error {
-	search := c.Query("search")
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
 
-	page := 1
-	limit := 10
+	page,err := strconv.ParseUint(pageStr, 10, 64)
+	limit,err := strconv.ParseUint(limitStr, 10, 64)
 
-	if pageStr != "" {
-		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
-			page = p
-		}
-	}
-	if limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
-			limit = l
-		}
-	}
-
-	departments, total, err := cl.departmentService.GetDepartmentServicePaginated(search, page, limit)
+	
+	departments, total, err := cl.departmentService.GetDepartmentServicePaginated( int(page), int(limit))
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -171,10 +130,6 @@ func (cl *DepartmentController) GetDepartmentByIDController(c fiber.Ctx) error {
 	)
 	if err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
 		return helper.Error(c, 404, err.Error())
 	}
 
@@ -185,24 +140,11 @@ func (cl *DepartmentController) GetDepartmentByIDController(c fiber.Ctx) error {
 	)
 }
 
-func (cl *DepartmentController) GetDeletedDepartmentsController(c fiber.Ctx) error {
-	departments, err := cl.departmentService.GetDepartmentServiceDeleted()
-	if err != nil {
-		return helper.Error(c, 500, err.Error())
-	}
 
-	return helper.Success(
-		c,
-		"Deleted departments fetched successfully",
-		dto.ToDepartmentResponseListDTO(departments),
-	)
-}
 
 func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 
-
 	userID, ok := c.Locals("user_id").(uint)
-
 
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
@@ -217,7 +159,7 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.departmentService.GetInstitutionIDForUserService(uint(id))
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
+	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
 
@@ -239,10 +181,6 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 		&body,
 	); err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
 		return helper.Error(c, 400, err.Error())
 	}
 
@@ -252,9 +190,6 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 	)
 	if err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
 
 		return helper.Error(c, 500, err.Error())
 	}
@@ -290,10 +225,6 @@ func (cl *DepartmentController) DeleteDepartmentController(c fiber.Ctx) error {
 		uint(id),
 	); err != nil {
 
-		if err.Error() == "access denied" {
-			return helper.Error(c, 403, "Access denied")
-		}
-
 		return helper.Error(c, 400, err.Error())
 	}
 
@@ -301,18 +232,5 @@ func (cl *DepartmentController) DeleteDepartmentController(c fiber.Ctx) error {
 		c,
 		"Department deleted successfully",
 		nil,
-	)
-}
-
-func (cl *DepartmentController) FetchAllDepartmentsController(c fiber.Ctx) error {
-	departments, err := cl.departmentService.GetDepartmentService()
-	if err != nil {
-		return helper.Error(c, 500, err.Error())
-	}
-
-	return helper.Success(
-		c,
-		"All departments fetched successfully",
-		dto.ToDepartmentResponseListDTO(departments),
 	)
 }

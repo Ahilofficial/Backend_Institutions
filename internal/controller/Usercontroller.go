@@ -21,11 +21,10 @@ func NewUserController(userService *services.UserService) *UserController {
 }
 
 func (cl *UserController) SignUpController(c fiber.Ctx) error {
-	// Get role from URL parameter (e.g. /signup/faculty, /signup/student, /signup/institution_admin)
+
 	targetRole := strings.TrimSpace(c.Params("role"))
 	targetRole = strings.ReplaceAll(targetRole, "-", " ")
 	targetRole = strings.ReplaceAll(targetRole, "_", " ")
-
 
 	var body dto.SignUpDTO
 	if err := c.Bind().Body(&body); err != nil {
@@ -36,20 +35,16 @@ func (cl *UserController) SignUpController(c fiber.Ctx) error {
 		)
 	}
 
-	
 	body.Sanitize()
 
-	
 	if targetRole == "" && body.Role != "" {
 		targetRole = body.Role
 	}
 
-	// Validate request body
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// Create new user with the role from URL
 	user, err := cl.userService.SignUpWithRole(&body, targetRole)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
@@ -83,7 +78,6 @@ func (cl *UserController) SignInController(c fiber.Ctx) error {
 	if err != nil {
 		return helper.Error(c, 401, err.Error())
 	}
-
 
 	return helper.Success(c, "Signed in successfully", dto.AuthResponseDTO{
 		UserID:       user_id,

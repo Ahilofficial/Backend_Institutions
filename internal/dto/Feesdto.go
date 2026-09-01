@@ -3,77 +3,86 @@ package dto
 import (
 	"backend_institutions/internal/model"
 	"errors"
-	"github.com/jinzhu/copier"
 	"strings"
+
+	"github.com/jinzhu/copier"
 )
 
 type CreateFeesDTO struct {
-	Amount       float64 `json:"amount"`
-	HostelAmount uint     `json:"hostel_amount"`
-	DepartmentID uint    `json:"department_id"`
-
+	DepartmentID  uint    `json:"department_id"`
+	Semester      uint    `json:"semester"`
+	StudentID     uint    `json:"student_id,omitempty"`
+	CollegeAmount float64 `json:"college_amount"`
+	HostelAmount  float64 `json:"hostel_amount"`
+	Amount        float64 `json:"amount"`
+	PaymentMode   string  `json:"payment_mode"`
 }
 
-func (dto *CreateFeesDTO) Sanitize() {}
+func (dto *CreateFeesDTO) Sanitize() {
+	dto.PaymentMode = strings.TrimSpace(dto.PaymentMode)
+	if dto.Semester == 0 {
+		dto.Semester = 1
+	}
+	if dto.Amount == 0 && (dto.CollegeAmount > 0 || dto.HostelAmount > 0) {
+		dto.Amount = dto.CollegeAmount + dto.HostelAmount
+	}
+}
 
 func (dto *CreateFeesDTO) Validate() error {
-	if dto.Amount <= 0 {
-		return errors.New("amount is required and must be greater than 0")
-	}
+	dto.Sanitize()
 	if dto.DepartmentID == 0 {
 		return errors.New("department_id is required")
+	}
+	if dto.Amount <= 0 {
+		return errors.New("amount must be greater than 0")
 	}
 	return nil
 }
 
-type StudentPaymentResponseDTO struct {
-	ID          uint    `json:"id"`
-	StudentID   uint    `json:"student_id"`
-	PaymentID   uint    `json:"payment_id"`
-	TotalAmount float64 `json:"total_amount"`
-	Status      string  `json:"status"`
-}
-
 type UpdateFeesDTO struct {
-	PaymentMode string  `json:"payment_mode"`
-	Amount      float64 `json:"amount"`
-	TotalAmount float64 `json:"total_amount"`
+	CollegeAmount float64 `json:"college_amount"`
+	HostelAmount  float64 `json:"hostel_amount"`
+	Amount        float64 `json:"amount"`
+	TotalAmount   float64 `json:"total_amount"`
+	PaymentMode   string  `json:"payment_mode"`
 }
 
 func (dto *UpdateFeesDTO) Sanitize() {
-	dto.PaymentMode = strings.TrimSpace(strings.ToLower(dto.PaymentMode))
-	if dto.Amount == 0 && dto.TotalAmount > 0 {
-		dto.Amount = dto.TotalAmount
+	dto.PaymentMode = strings.TrimSpace(dto.PaymentMode)
+	if dto.TotalAmount == 0 && dto.Amount > 0 {
+		dto.TotalAmount = dto.Amount
+	}
+	if dto.TotalAmount == 0 && (dto.CollegeAmount > 0 || dto.HostelAmount > 0) {
+		dto.TotalAmount = dto.CollegeAmount + dto.HostelAmount
 	}
 }
 
 func (dto *UpdateFeesDTO) Validate() error {
 	dto.Sanitize()
-
-	if dto.PaymentMode == "" {
-		return errors.New("payment mode is required")
-	}
-	if dto.Amount <= 0 {
-		return errors.New("amount is required and must be greater than 0")
+	if dto.TotalAmount <= 0 && dto.CollegeAmount <= 0 && dto.HostelAmount <= 0 && dto.PaymentMode == "" {
+		return errors.New("no update fields provided")
 	}
 	return nil
 }
 
 type PaymentResponseDTO struct {
-	ID          uint    `json:"id"`
-	Month       string  `json:"month"`
-	AmountPaid  float64 `json:"amount_paid"`
-	// PaymentMode string  `json:"payment_mode"`
+	ID         uint    `json:"id"`
+	AmountPaid float64 `json:"amount_paid"`
 }
+
 type FeesResponseDTO struct {
 	ID            uint                 `json:"id"`
-	TotalAmount   float64              `json:"total_amount"`
+	DepartmentID  uint                 `json:"department_id"`
+	Semester      uint                 `json:"semester"`
+	StudentID     *uint                `json:"student_id,omitempty"`
+	CollegeAmount float64              `json:"college_amount"`
+	HostelAmount  float64              `json:"hostel_amount"`
+	TotalAmount   float64              `json:"amount"`
 	TotalPaid     float64              `json:"total_paid"`
 	PendingAmount float64              `json:"pending_amount"`
-	StudentID     uint                 `json:"student_id,omitempty"`
-	DepartmentID  uint                 `json:"department_id,omitempty"`
+	PaymentMode   string               `json:"payment_mode,omitempty"`
 	IsActive      bool                 `json:"is_active"`
-	Payments      []PaymentResponseDTO `json:"payments"`
+	Payments      []PaymentResponseDTO `json:"payments,omitempty"`
 }
 
 func ToFeesResponseDTO(fees *model.Fees) FeesResponseDTO {
@@ -91,33 +100,36 @@ func ToFeesResponseListDTO(fees []model.Fees) []FeesResponseDTO {
 }
 
 type CreatePaymentDTO struct {
-	Month       string  `json:"month"`
+	FeeID       uint    `json:"fee_id"`
+	StudentID   uint    `json:"student_id,omitempty"`
+	Semester    uint    `json:"semester,omitempty"`
 	AmountPaid  float64 `json:"amount_paid"`
 	PaymentMode string  `json:"payment_mode"`
-	FeeID       uint    `json:"fee_id"`
 }
 
 func (dto *CreatePaymentDTO) Sanitize() {
-	dto.Month = strings.TrimSpace(dto.Month)
-	dto.PaymentMode = strings.TrimSpace(strings.ToLower(dto.PaymentMode))
+	dto.PaymentMode = strings.TrimSpace(dto.PaymentMode)
 }
 
 func (dto *CreatePaymentDTO) Validate() error {
-	if dto.Month == "" {
-		return errors.New("month is required")
+	dto.Sanitize()
+	if dto.FeeID == 0 && dto.StudentID == 0 {
+		return errors.New("fee_id or student_id is required")
 	}
-
-	if dto.PaymentMode == "" {
-		return errors.New("payment mode is required")
-	}
-
 	if dto.AmountPaid <= 0 {
-		return errors.New("amount paid must be greater than zero")
+		return errors.New("amount_paid must be greater than zero")
 	}
-
-	if dto.FeeID == 0 {
-		return errors.New("fee id is required")
+	if dto.PaymentMode == "" {
+		return errors.New("payment_mode is required")
 	}
-
 	return nil
+}
+
+type StudentPaymentResponseDTO struct {
+	ID          uint    `json:"id"`
+	StudentID   uint    `json:"student_id"`
+	PaymentID   uint    `json:"payment_id"`
+	Semester    uint    `json:"semester"`
+	TotalAmount float64 `json:"total_amount"`
+	Status      string  `json:"status"`
 }

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8b082b2f-7c15-4a64-af32-55dbd7c570b5",
     "name": "Backend Institutions Complete API Collection",
-    "description": "Complete collection covering all endpoints including Authentication, Super Admin, RBAC, Institutions, Principals, Departments, Faculties, Students, Fees, and Payments.",
+    "description": "Complete collection covering all endpoints including Authentication, Super Admin, RBAC, Institutions, Departments, Faculties, Students, Fees, and Payments.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -604,94 +604,7 @@
       ]
     },
     {
-      "name": "3. Principals",
-      "item": [
-        {
-          "name": "Create Principal",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.success && jsonData.data && jsonData.data.id) {",
-                  "        pm.collectionVariables.set(\"principal_id\", jsonData.data.id);",
-                  "    }",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Dr. Robert Davis\",\n  \"gender\": \"Male\",\n  \"joining_date\": \"2026-01-15T00:00:00Z\",\n  \"institution_id\": 1\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/principals",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "principals"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get All Principals (Paginated)",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/principals?page=1&limit=10",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "principals"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "10"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Principal by ID",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/principals/{{principal_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "principals",
-                "{{principal_id}}"
-              ]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "4. Departments",
+      "name": "3. Departments",
       "item": [
         {
           "name": "Create Department",
@@ -778,7 +691,7 @@
       ]
     },
     {
-      "name": "5. Faculties",
+      "name": "4. Faculties",
       "item": [
         {
           "name": "Create Faculty",
@@ -808,7 +721,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Prof. John Smith\",\n  \"gender\": \"Male\",\n  \"joining_date\": \"2026-03-01T00:00:00Z\",\n  \"department_id\": 1\n}"
+              "raw": "{\n  \"name\": \"Prof. Alan Turing\",\n  \"gender\": \"Male\",\n  \"department_id\": 1\n}"
             },
             "url": {
               "raw": "{{base_url}}/faculties",
@@ -826,22 +739,12 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/faculties?page=1&limit=10",
+              "raw": "{{base_url}}/faculties",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "faculties"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "10"
-                }
               ]
             }
           }
@@ -851,13 +754,13 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{base_url}}/faculties/loginfaculty",
+              "raw": "{{base_url}}/faculties/profile",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "faculties",
-                "loginfaculty"
+                "profile"
               ]
             }
           }
@@ -882,7 +785,7 @@
       ]
     },
     {
-      "name": "6. Students",
+      "name": "5. Students",
       "item": [
         {
           "name": "Create Student",
@@ -912,7 +815,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Alice Johnson\",\n  \"gender\": \"Female\",\n  \"faculty_id\": 1,\n  \"hosteller\": true,\n  \"scholorship\": false,\n  \"mq\": false\n}"
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"gender\": \"male\",\n  \"faculty_id\": 1,\n  \"semester\": 1,\n  \"hosteller\": true,\n  \"scholarship\": false,\n  \"mq\": false\n}"
             },
             "url": {
               "raw": "{{base_url}}/students",
@@ -983,67 +886,27 @@
           }
         },
         {
-          "name": "Fetch Paid Students by Month",
+          "name": "changing semester",
           "request": {
-            "method": "GET",
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"semester\": 2\n}"
+            },
             "url": {
-              "raw": "{{base_url}}/students/paid?month=June",
+              "raw": "{{base_url}}/students/{{student_id}}",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "students",
-                "paid"
-              ],
-              "query": [
-                {
-                  "key": "month",
-                  "value": "June"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Fetch Not Paid Students by Month",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/students/not-paid?month=June",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "students",
-                "not-paid"
-              ],
-              "query": [
-                {
-                  "key": "month",
-                  "value": "June"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Fetch All Students Monthly Overview",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/students/month-all?month=June",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "students",
-                "month-all"
-              ],
-              "query": [
-                {
-                  "key": "month",
-                  "value": "June"
-                }
+                "{{student_id}}"
               ]
             }
           }
@@ -1051,26 +914,10 @@
       ]
     },
     {
-      "name": "7. Fees & Payments",
+      "name": "6. Fees & Payments",
       "item": [
         {
           "name": "Create Student Fee Record",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    if (jsonData.success && jsonData.data && jsonData.data.id) {",
-                  "        pm.collectionVariables.set(\"fee_id\", jsonData.data.id);",
-                  "    }",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [
@@ -1081,7 +928,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 100000,\n  \"department_id\": 1\n}"
+              "raw": "{\n  \"department_id\": 1,\n  \"semester\": 1,\n  \"college_amount\": 40000,\n  \"hostel_amount\": 15000\n}"
             },
             "url": {
               "raw": "{{base_url}}/fees",
@@ -1090,6 +937,58 @@
               ],
               "path": [
                 "fees"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Department Fee by Semester",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/fees/department/1/semester/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "department",
+                "1",
+                "semester",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Department Fees",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/fees/department/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "department",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Fee by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/fees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "1"
               ]
             }
           }
@@ -1120,6 +1019,48 @@
           }
         },
         {
+          "name": "Update Fee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"college_amount\": 45000,\n  \"hostel_amount\": 18000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/fees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Fee",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/fees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "1"
+              ]
+            }
+          }
+        },
+        {
           "name": "Create Payment Installment",
           "request": {
             "method": "POST",
@@ -1131,7 +1072,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fee_id\": 1,\n  \"amount_paid\": 10000,\n  \"payment_mode\": \"UPI\",\n  \"month\": \"August\"\n}"
+              "raw": "{\n  \"fee_id\": 8,\n  \"amount_paid\": 75000,\n  \"payment_mode\": \"UPI\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/fees/payment",
@@ -1146,7 +1087,24 @@
           }
         },
         {
-          "name": "Get Fee Payments by Fee ID",
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/fees/payment/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "fees",
+                "payment",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payments for a Fee Record",
           "request": {
             "method": "GET",
             "url": {
@@ -1195,11 +1153,6 @@
     },
     {
       "key": "institution_id",
-      "value": "1",
-      "type": "string"
-    },
-    {
-      "key": "principal_id",
       "value": "1",
       "type": "string"
     },

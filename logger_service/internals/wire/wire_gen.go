@@ -11,8 +11,6 @@ import (
 	"backend_institutions/logger_service/internals/services"
 )
 
-// Injectors from wire.go:
-
 func InitializeLoggerService() (*services.LoggerService, error) {
 	loggerRepo := repository.NewLoggerRepo()
 	loggerService := services.NewLoggerService(loggerRepo)

@@ -11,68 +11,95 @@ type FacultyService struct {
 	facultyRepo    *repository.FacultyRepository
 	departmentRepo *repository.DepartmentRepository
 	userRepo       *repository.UserRepository
+	instituteRepo   *repository.InstitutionRepository
 }
 
 func NewFacultyService(
 	facultyRepo *repository.FacultyRepository,
 	departmentRepo *repository.DepartmentRepository,
 	userRepo *repository.UserRepository,
+	instituteRepo *repository.InstitutionRepository,
 ) *FacultyService {
 	return &FacultyService{
 		facultyRepo:    facultyRepo,
 		departmentRepo: departmentRepo,
 		userRepo:       userRepo,
+		instituteRepo:   instituteRepo,
 	}
 }
 
-func (s *FacultyService) checkInstitutionAccess(
+func (s *FacultyService) GetNonPaidStudentsForFacultyService(
 	userID uint,
-	institutionID uint,
-) error {
-	hasAccess, err := s.userRepo.HasInstitutionAccess(userID, institutionID)
+) ([]model.Student, error) {
+
+	facultyID, err := s.GetFacultyIDForUserService(userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if !hasAccess {
-		return errors.New("access denied")
+	students, err := s.facultyRepo.GetNonPaidStudentsForFaculty(facultyID)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil
+	return students, nil
 }
 
-func (s *FacultyService) CreateFacultyService(userID uint, faculty *model.Faculty) (model.Faculty, error) {
+func (s *FacultyService) GetFacultyIDForUserService(
+	userID uint,
+) (uint, error) {
+
+	facultyID, err := s.userRepo.GetFacultyIDForUser(userID)
+	if err != nil {
+		return 0, err
+	}
+
+	return facultyID, nil
+}
+
+func (s *FacultyService) GetPaidStudentsForFacultyService(
+	userID uint,
+) ([]model.Student, error) {
+
+	facultyID, err := s.GetFacultyIDForUserService(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	students, err := s.facultyRepo.GetPaidStudentsForFaculty(facultyID)
+	if err != nil {
+		return nil, err
+	}
+
+	return students, nil
+}
+
+
+
+
+func (s *FacultyService) CreateFacultyService(
+	userID uint,
+	faculty *model.Faculty,
+
+) (model.Faculty, error) {
 	department, err := s.departmentRepo.FetchDepartmentById(faculty.DepartmentID)
 	if err != nil || department.ID == 0 {
 		return model.Faculty{}, errors.New("department not found")
 	}
+	
+	
+	existingType := s.userRepo.CheckUserExistingProfileFaculty(userID)
 
-	targetUserID := userID
-	if faculty.UserID > 0 {
-		targetUserID = faculty.UserID
+	if !existingType {
+		return model.Faculty{}, errors.New(
+			"user is already registered as a  student",
+		)
 	}
-
-	if targetUserID > 0 {
-		if err := s.userRepo.ValidateUser(targetUserID); err != nil {
-			return model.Faculty{}, err
-		}
-
-		existingType, err := s.userRepo.CheckUserExistingProfile(targetUserID)
-		if err == nil && existingType != "" {
-			return model.Faculty{}, errors.New("user is already registered as a " + existingType)
-		}
-	}
-
-	faculty.UserID = targetUserID
 	if err := s.facultyRepo.CreateFaculty(faculty); err != nil {
 		return model.Faculty{}, err
 	}
 
-	if faculty.UserID != 0 {
-		_ = s.userRepo.UpdateUserFacultyID(faculty.UserID, faculty.ID)
-		_ = s.userRepo.AssignRoleByName(faculty.UserID, "faculty")
-	}
-
+	
 	return *faculty, nil
 }
 
@@ -81,12 +108,12 @@ func (s *FacultyService) GetFacultyService() ([]model.Faculty, error) {
 }
 
 func (s *FacultyService) GetFacultyServicePaginated(
-	search string,
+	
 	page int,
 	limit int,
 ) ([]model.Faculty, int64, error) {
 	return s.facultyRepo.FetchFacultyPaginated(
-		search,
+	
 		page,
 		limit,
 	)
@@ -109,16 +136,7 @@ func (s *FacultyService) GetFacultyServiceById(
 		return &faculty, nil
 	}
 
-	// 2. For Super Admin, Institution Admin, or Principal: check institution access
-	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.checkInstitutionAccess(userID, facultyInstitutionID); err != nil {
-		return nil, errors.New("access denied: faculty does not belong to your institution")
-	}
-
+	
 	return &faculty, nil
 }
 
@@ -150,43 +168,26 @@ func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Studen
 	return s.facultyRepo.FetchStudentsByFacultyID(facultyID)
 }
 
-func (s *FacultyService) GetFacultyServiceDeleted() ([]model.Faculty, error) {
-	return s.facultyRepo.FetchFacultyDeleted()
-}
 
 func (s *FacultyService) DeleteFacultyService(
 	userID uint,
 	id uint,
 ) error {
-	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	if userFacultyID > 0 {
-		return errors.New("access denied: faculty cannot delete faculty profiles")
-	}
-
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
 	}
-
-	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
-	if err != nil {
-		return err
+	
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if faculty.ID!=userFacultyID{
+		return errors.New("you cant able to delete other faculty")
 	}
 
-	if err := s.checkInstitutionAccess(userID, facultyInstitutionID); err != nil {
-		return errors.New("access denied: faculty does not belong to your institution")
-	}
 
 	return s.facultyRepo.DeleteFaculty(id)
 }
 
-func (s *FacultyService) GetActiveFacultyService() (model.Faculty, error) {
-	return s.facultyRepo.GetActiveFaculty()
-}
 
-func (s *FacultyService) GetInactiveFacultyService() (model.Faculty, error) {
-	return s.facultyRepo.GetInactiveFaculty()
-}
 
 func (s *FacultyService) UpdateFacultyService(
 	userID uint,
@@ -208,8 +209,9 @@ func (s *FacultyService) UpdateFacultyService(
 		if err != nil {
 			return err
 		}
-		if err := s.checkInstitutionAccess(userID, facultyInstitutionID); err != nil {
-			return errors.New("access denied: cannot update this faculty profile")
+		logginedUserInstitutionID := s.facultyRepo.LoginnedUserInstitutionIDRepo(userID)
+		if logginedUserInstitutionID == 0 || facultyInstitutionID != logginedUserInstitutionID {
+			return errors.New("access denied: you can only update your own faculty profile")
 		}
 	}
 
@@ -217,5 +219,3 @@ func (s *FacultyService) UpdateFacultyService(
 	faculty.Gender = req.Gender
 	return s.facultyRepo.UpdateFacultyById(&faculty)
 }
-
-

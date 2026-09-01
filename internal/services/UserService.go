@@ -177,9 +177,6 @@ func (s *UserService) UpdateStudentID(userID uint, studentID uint) error {
 func (s *UserService) GetUserByID(userID uint) (*model.User, error) {
 	return s.userrepo.GetUserByID(userID)
 }
-func (s *UserService) UpdatePrincipalID(userID uint, principalID uint) error {
-	return s.userrepo.UpdatePrincipalID(userID, principalID)
-}
 func (s *UserService) UpdateFacultyID(userID uint, facultyID uint) error {
 	return s.userrepo.UpdateFacultyID(userID, facultyID)
 }
@@ -203,15 +200,11 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 		return "", "", 0, "", "", errors.New("invalid email or password")
 	}
 
-	// Auto-detect and sync profile IDs if mapped in respective tables
 	if user.StudentID == 0 {
 		user.StudentID, _ = s.userrepo.GetUserStudentID(user.ID)
 	}
 	if user.FacultyID == 0 {
 		user.FacultyID, _ = s.userrepo.GetUserFacultyID(user.ID)
-	}
-	if user.PrincipalID == 0 {
-		user.PrincipalID, _ = s.userrepo.GetUserPrincipalID(user.ID)
 	}
 
 	primaryRole := ""
@@ -232,7 +225,7 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 			log.Printf("Failed to send sign-in email via gRPC: %v\n", sendErr)
 		}
 	}(user.Email, user.Name)
-	
+
 	sessionID := uuid.New().String()
 	userAgent := c.Get("User-Agent")
 
@@ -419,9 +412,6 @@ func (s *UserService) GetProfileByID(id uint) (model.User, error) {
 	}
 	if user.FacultyID == 0 {
 		user.FacultyID, _ = s.userrepo.GetUserFacultyID(id)
-	}
-	if user.PrincipalID == 0 {
-		user.PrincipalID, _ = s.userrepo.GetUserPrincipalID(id)
 	}
 	roles, _ := s.userrepo.FetchUserRoles(id)
 	user.Roles = roles

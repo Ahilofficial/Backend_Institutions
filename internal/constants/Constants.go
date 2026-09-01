@@ -18,39 +18,37 @@ const (
 	PermissionViewFaculties   = "VIEW_FACULTIES"
 	PermissionUpdateFaculties = "UPDATE_FACULTY"
 	PermissionDeleteFaculties = "DELETE_FACULTY"
-	PermissionViewIDFaculties= "VIEW_FACULTY_ID"
-
-	PermissionCreatePrincipals = "CREATE_PRINCIPAL"
-	PermissionViewPrincipals   = "VIEW_PRINCIPALS"
-	PermissionUpdatePrincipals = "UPDATE_PRINCIPAL"
-	PermissionDeletePrincipals = "DELETE_PRINCIPAL"
-	PermissionViewIDPrincipals= "VIEW_PRINCIPAL_ID"
+	PermissionViewIDFaculties = "VIEW_FACULTY_ID"
 
 	PermissionCreateStudents = "CREATE_STUDENT"
 	PermissionViewStudents   = "VIEW_STUDENTS"
 	PermissionUpdateStudents = "UPDATE_STUDENT"
 	PermissionDeleteStudents = "DELETE_STUDENT"
-	PermissionViewStudentsID= "VIEW_STUDENT_ID"
-	StudentMonth = "VIEW_STUDENT_MONTH"
+	PermissionViewStudentsID = "VIEW_STUDENT_ID"
 
 	PermissionCreatePayments = "CREATE_PAYMENTS"
 	PermissionViewPayments   = "VIEW_PAYMENTS"
 	PermissionUpdatePayments = "UPDATE_PAYMENTS"
 	PermissionDeletePayments = "DELETE_PAYMENTS"
-	PermissionViewIDPayments ="VIEW_ID_PAYMENTS"
-	PermissionCreatePayment= "CREATE_PAYMENT"
+	PermissionViewIDPayments = "VIEW_ID_PAYMENTS"
+	PermissionCreatePayment  = "CREATE_PAYMENT"
 
 	PermissionCreateFees = "CREATE_FEE"
 	PermissionViewFees   = "VIEW_FEES"
 	PermissionUpdateFees = "UPDATE_FEE"
 	PermissionDeleteFees = "DELETE_FEE"
-	PermissionViewIDFees = "VIEW_ID_FES"
+	PermissionViewIDFees = "VIEW_ID_FEES"
+
+	PermissionCreateSemesterFee = "CREATE_SEMESTER_FEE"
+	PermissionViewSemesterFee   = "VIEW_SEMESTER_FEE"
+	PermissionUpdateSemesterFee = "UPDATE_SEMESTER_FEE"
+	PermissionDeleteSemesterFee = "DELETE_SEMESTER_FEE"
+	PermissionPromoteStudent    = "PROMOTE_STUDENT"
 
 	PermissionManageInstitution = "institution.manage"
 
-	PermissionAssignRoles = "ASSIGN_ROLE"
-	FacultyStudentMonth="FacultyStudentMonth"
-	PermissionFacultyViewStudents="PermissionFacultyViewStudents"
+	PermissionAssignRoles         = "ASSIGN_ROLE"
+	PermissionFacultyViewStudents = "PermissionFacultyViewStudents"
 )
 
 var AllPermissions = []string{
@@ -72,18 +70,12 @@ var AllPermissions = []string{
 	PermissionDeleteFaculties,
 	PermissionViewIDFaculties,
 
-	PermissionCreatePrincipals,
-	PermissionViewPrincipals,
-	PermissionUpdatePrincipals,
-	PermissionDeletePrincipals,
-	PermissionViewIDPrincipals,
-
 	PermissionCreateStudents,
 	PermissionViewStudents,
 	PermissionUpdateStudents,
 	PermissionDeleteStudents,
 	PermissionViewStudentsID,
-	StudentMonth,
+	PermissionPromoteStudent,
 
 	PermissionCreateFees,
 	PermissionViewFees,
@@ -91,13 +83,16 @@ var AllPermissions = []string{
 	PermissionDeleteFees,
 	PermissionViewIDFees,
 
+	PermissionCreateSemesterFee,
+	PermissionViewSemesterFee,
+	PermissionUpdateSemesterFee,
+	PermissionDeleteSemesterFee,
+
 	PermissionViewPayments,
 	PermissionAdminPermission,
 	PermissionManageInstitution,
 	PermissionViewIDPayments,
 	PermissionCreatePayment,
-	
-	FacultyStudentMonth,
 
 	PermissionAssignRoles,
 

@@ -19,7 +19,7 @@ type Department struct {
 
 	Students []Student `gorm:"foreignKey:DepartmentID;references:ID" json:"students,omitempty"`
 
-	SemesterFees []SemesterFee `gorm:"foreignKey:DepartmentID;references:ID" json:"semester_fees,omitempty"`
+	Fees []Fees `gorm:"foreignKey:DepartmentID;references:ID" json:"fees,omitempty"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

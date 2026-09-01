@@ -14,7 +14,6 @@ func RequirePermission(permission string) fiber.Handler {
 			return helper.Error(c, 401, "user not authenticated")
 		}
 
-		
 		var isSuperAdmin bool
 		_ = database.DB.Raw(`
 			SELECT EXISTS(
@@ -27,7 +26,6 @@ func RequirePermission(permission string) fiber.Handler {
 			return c.Next()
 		}
 
-		
 		var count int64
 		_ = database.DB.Raw(`
 			SELECT COUNT(*) FROM user_roles ur

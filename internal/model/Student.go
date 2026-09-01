@@ -24,6 +24,8 @@ type Student struct {
 
 	Semester uint `gorm:"not null;default:1" json:"semester"`
 
+	Pending bool `gorm:"default:true" json:"pending"`
+
 	IsProfileVerified bool `gorm:"default:false" json:"is_verified"`
 
 	UserID       uint `gorm:"not null;index" json:"user_id"`

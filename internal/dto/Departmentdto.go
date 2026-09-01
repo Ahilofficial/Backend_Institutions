@@ -8,9 +8,9 @@ import (
 )
 
 type CreateDepartmentDTO struct {
-	DepartmentName string  `json:"department_name"`
-	InstitutionID  uint    `json:"institution_id"`
-	CourseDuration  uint 		 `json:"course_duration"`
+	DepartmentName string `json:"department_name"`
+	InstitutionID  uint   `json:"institution_id"`
+	CourseDuration uint   `json:"course_duration"`
 }
 
 func (dto *CreateDepartmentDTO) Sanitize() {
@@ -25,7 +25,7 @@ func (dto *CreateDepartmentDTO) Validate() error {
 	if dto.InstitutionID == 0 {
 		return errors.New("institution id is required")
 	}
-	if dto.CourseDuration==0{
+	if dto.CourseDuration == 0 {
 		return errors.New("course duration is required")
 	}
 	return nil
@@ -34,7 +34,7 @@ func (dto *CreateDepartmentDTO) Validate() error {
 type UpdateDepartmentDTO struct {
 	DepartmentName string  `json:"department_name"`
 	FeeAmount      float64 `json:"fee_amount"`
-	CourseDuration  uint 		 `json:"course_duration"`
+	CourseDuration uint    `json:"course_duration"`
 }
 
 func (dto *UpdateDepartmentDTO) Sanitize() {

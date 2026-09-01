@@ -26,41 +26,20 @@ func (r *DepartmentRepository) CreateDepartment(department *model.Department) er
 
 	res, err := db.Exec(
 		`INSERT INTO departments
-			(department_name, fee_amount, institution_id, created_at, updated_at, is_active)
-		SELECT ?, ?, id, ?, ?, ?
-		FROM institutions
-		WHERE id = ?
-		  AND deleted_at IS NULL
-		  AND is_active = true
-		  AND NOT EXISTS (
-			  SELECT 1
-			  FROM departments
-			  WHERE department_name = ?
-			    AND institution_id = ?
-			    AND deleted_at IS NULL
-		  )`,
+			(department_name, course_duration, institution_id, created_at, updated_at, is_active)
+		VALUES (?, ?, ?, ?, ?, ?)`,
 		department.DepartmentName,
-		// department.FeeAmount,
+		department.CourseDuration,
+		department.InstitutionID,
 		now,
 		now,
 		true,
-		department.InstitutionID,
-		department.DepartmentName,
-		department.InstitutionID,
 	)
 	if err != nil {
 		return err
 	}
 
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return errors.New("department name already exists in this institution, or parent institution is inactive/invalid")
-	}
-
+	
 	id, err := res.LastInsertId()
 	if err != nil {
 		return err
@@ -84,29 +63,22 @@ func (r *DepartmentRepository) FetchDepartment() ([]model.Department, error) {
 	return depts, err
 }
 
-func (r *DepartmentRepository) FetchDepartmentPaginated(search string, page, limit int) ([]model.Department, int64, error) {
+func (r *DepartmentRepository) FetchDepartmentPaginated( page, limit int) ([]model.Department, int64, error) {
 	var (
 		depts []model.Department
 		total int64
 	)
 
-	query := r.db.Model(&model.Department{})
+	
 
-	// Search
-	if search != "" {
-		search = "%" + search + "%"
-		query = query.Where("department_name LIKE ?", search)
-	}
-
-	// Count
-	if err := query.Count(&total).Error; err != nil {
+	
+	if err := r.db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * limit
 
-	// Fetch with associations
-	err := query.
+	err := r.db.
 		Preload("Faculties").
 		Preload("Faculties.Students").
 		Preload("Faculties.Students.Fees").
@@ -140,46 +112,6 @@ func (r *DepartmentRepository) FetchDepartmentById(id uint) (model.Department, e
 	return dept, nil
 }
 
-func (r *DepartmentRepository) FetchDepartmentDeleted() ([]model.Department, error) {
-	var depts []model.Department
-	err := r.db.Raw("SELECT * FROM departments WHERE deleted_at IS NOT NULL").Scan(&depts).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return depts, err
-}
-
-func (r *DepartmentRepository) GetActiveDepartment() (model.Department, error) {
-	var depts []model.Department
-	err := r.db.Raw("SELECT * FROM departments WHERE is_active = ? AND deleted_at IS NULL LIMIT 1", true).Scan(&depts).Error
-	if err != nil {
-		return model.Department{}, err
-	}
-	if len(depts) == 0 {
-		return model.Department{}, gorm.ErrRecordNotFound
-	}
-
-	
-	return depts[0], nil
-}
-
-func (r *DepartmentRepository) GetInactiveDepartment() (model.Department, error) {
-	var depts []model.Department
-	err := r.db.Raw("SELECT * FROM departments WHERE is_active = ? AND deleted_at IS NULL LIMIT 1", false).Scan(&depts).Error
-	if err != nil {
-		return model.Department{}, err
-	}
-	if len(depts) == 0 {
-		return model.Department{}, gorm.ErrRecordNotFound
-	}
-
-	if err != nil {
-		return model.Department{}, err
-	}
-	return depts[0], nil
-}
-
 func (r *DepartmentRepository) DeleteDepartment(id uint) error {
 	db, err := r.db.DB()
 	if err != nil {
@@ -208,8 +140,8 @@ func (r *DepartmentRepository) UpdateDepartmentById(department *model.Department
 		return err
 	}
 	_, err = db.Exec(
-		"UPDATE departments SET department_name = ?, fee_amount = ?,  WHERE id = ?",
-		department.DepartmentName,  time.Now(), department.ID,
+		"UPDATE departments SET department_name = ?, course_duration = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+		department.DepartmentName, department.CourseDuration, time.Now(), department.ID,
 	)
 	return err
 }
@@ -257,11 +189,6 @@ func (r *DepartmentRepository) GetInstitutionByDepartmentID(
 	if err != nil {
 		return 0, err
 	}
-
-	if institutionID == 0 {
-		return 0, errors.New("institution not found")
-	}
-
 	return institutionID, nil
 }
 

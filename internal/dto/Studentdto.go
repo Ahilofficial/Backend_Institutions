@@ -8,14 +8,14 @@ import (
 )
 
 type CreateStudentDTO struct {
-	Name        string `json:"name"`
-	Gender      string `json:"gender"`
-	FacultyID   uint   `json:"faculty_id"`
-	Semester    uint     		`json:"semester"`
-	
-	Hosteller   bool   `json:"hosteller"`
-	Scholorship bool   `json:"scholorship"`
-	MQ          bool   `json:"mq"`
+	Name      string `json:"name"`
+	Gender    string `json:"gender"`
+	FacultyID uint   `json:"faculty_id"`
+	Semester  uint   `json:"semester"`
+
+	Hosteller   bool `json:"hosteller"`
+	Scholorship bool `json:"scholorship"`
+	MQ          bool `json:"mq"`
 }
 
 func (dto *CreateStudentDTO) Sanitize() {
@@ -62,6 +62,23 @@ func (dto *UpdateStudentDTO) Sanitize() {
 	dto.Gender = strings.TrimSpace(strings.ToLower(dto.Gender))
 }
 
+type UpdateStudentSemesterDTO struct {
+	Semester    uint  `json:"semester"`
+	Hosteller   *bool `json:"hosteller,omitempty"`
+	Scholarship *bool `json:"scholarship,omitempty"`
+	MQ          *bool `json:"mq,omitempty"`
+}
+
+func (dto *UpdateStudentSemesterDTO) Validate() error {
+	if dto.Semester == 0 {
+		return errors.New("semester is required and must be greater than 0")
+	}
+	if dto.MQ != nil && dto.Scholarship != nil && *dto.MQ && *dto.Scholarship {
+		return errors.New("management quota student cannot have scholarship")
+	}
+	return nil
+}
+
 type StudentFacultyDTO struct {
 	ID           uint   `json:"id"`
 	Name         string `json:"name"`
@@ -70,18 +87,20 @@ type StudentFacultyDTO struct {
 }
 
 type StudentResponseDTO struct {
-	ID          uint               `json:"id"`
-	Name        string             `json:"name"`
-	Gender      string             `json:"gender"`
-	FacultyID   uint               `json:"faculty_id"`
-	UserID      uint               `json:"user_id,omitempty"`
-	IsActive    bool               `json:"is_active"`
-	Hosteller   bool               `json:"hosteller"`
-	Scholorship bool               `json:"scholorship"`
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Gender      string `json:"gender"`
+	FacultyID   uint   `json:"faculty_id"`
+	UserID      uint   `json:"user_id,omitempty"`
+	IsActive    bool   `json:"is_active"`
+	Hosteller   bool   `json:"hosteller"`
+	Scholorship bool   `json:"scholorship"`
 
-	MQ          bool               `json:"mq"`
+	MQ              bool                        `json:"mq"`
 	FeeAmount       float64                     `json:"fee_amount"`
 	BaseAmount      float64                     `json:"base_amount"`
+	Semester        uint                        `json:"semester"`
+	Pending         bool                        `json:"pending"`
 	Faculty         *StudentFacultyDTO          `json:"faculty,omitempty"`
 	Fees            []FeesResponseDTO           `json:"fees,omitempty"`
 	StudentPayments []StudentPaymentResponseDTO `json:"student_payments,omitempty"`
@@ -101,29 +120,4 @@ func ToStudentResponseListDTO(studs []model.Student) []StudentResponseDTO {
 	}
 
 	return list
-}
-
-type StudentMonthlyStatusDTO struct {
-	StudentID     uint    `json:"student_id"`
-	StudentName   string  `json:"student_name"`
-	Gender        string  `json:"gender"`
-	FacultyID     uint    `json:"faculty_id"`
-	FacultyName   string  `json:"faculty_name,omitempty"`
-	DepartmentID  uint    `json:"department_id,omitempty"`
-	InstitutionID uint    `json:"institution_id,omitempty"`
-	Month         string  `json:"month"`
-	IsPaid        bool    `json:"is_paid"`
-	AmountPaid    float64 `json:"amount_paid"`
-	PaymentMode   string  `json:"payment_mode,omitempty"`
-	TotalFee      float64 `json:"total_fee"`
-	PendingFee    float64 `json:"pending_fee"`
-}
-
-type MonthlyStudentsOverviewDTO struct {
-	Month               string                    `json:"month"`
-	InstitutionID       uint                      `json:"institution_id,omitempty"`
-	TotalStudents       int                       `json:"total_students"`
-	PaidStudentsCount   int                       `json:"paid_students_count"`
-	UnpaidStudentsCount int                       `json:"unpaid_students_count"`
-	Students            []StudentMonthlyStatusDTO `json:"students"`
 }

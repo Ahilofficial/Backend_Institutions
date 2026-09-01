@@ -7,11 +7,10 @@ import (
 )
 
 type Payment struct {
-	ID           uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Month        string         `gorm:"type:varchar(50)" json:"month"`
-	HostelAmount float64        `gorm:"type:decimal(10,2);default:0" json:"hostel_amount"`
-	AmountPaid   float64        `gorm:"type:decimal(10,2);not null" json:"amount_paid"`
-	PaymentMode  string         `gorm:"type:varchar(50)" json:"payment_mode"`
+	ID           uint    `gorm:"primaryKey;autoIncrement" json:"id"`
+	HostelAmount float64 `gorm:"type:decimal(10,2);default:0" json:"hostel_amount"`
+	AmountPaid   float64 `gorm:"type:decimal(10,2);not null" json:"amount_paid"`
+	PaymentMode  string  `gorm:"type:varchar(50)" json:"payment_mode"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

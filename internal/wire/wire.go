@@ -16,52 +16,38 @@ import (
 
 func InitializeApp() (*fiber.App, error) {
 	wire.Build(
-		// Database
+
 		database.NewDB,
 
-		// Repositories
 		repository.NewUserRepository,
 		repository.NewInstitutionRepository,
 		repository.NewDepartmentRepository,
 		repository.NewFacultyRepository,
-		repository.NewPrincipalRepository,
 		repository.NewStudentRepository,
 		repository.NewFeesRepository,
 		repository.NewRoleRepository,
-		repository.NewPermissionRepository,
 		repository.NewSessionRepository,
 		repository.NewMenuRepository,
 
-		// Services
 		services.NewSessionService,
 		services.NewUserService,
 		services.NewInstituteService,
 		services.NewDepartmentService,
 		services.NewFacultyService,
-		services.NewPrincipalService,
 		services.NewStudentService,
 		services.NewFeesService,
 		services.NewRoleService,
-		services.NewPermissionService,
 		services.NewMenuService,
 
-		// Controllers
 		controller.NewUserController,
 		controller.NewInstituteController,
 		controller.NewDepartmentController,
-
-		// FacultyController requires:
-		// FacultyService + UserService
 		controller.NewFacultyController,
-
-		controller.NewPrincipalControllers,
 		controller.NewStudentController,
 		controller.NewFeesController,
 		controller.NewRoleController,
-		controller.NewPermissionController,
 		controller.NewMenuController,
 
-		// Routes
 		routes.NewApp,
 	)
 

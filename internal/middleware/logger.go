@@ -19,7 +19,6 @@ func RequestResponseLogger() fiber.Handler {
 		status := c.Response().StatusCode()
 		respBody := string(c.Response().Body())
 
-		// Redact sensitive credential payloads
 		cleanEndpoint := strings.ToLower(endpoint)
 		if strings.Contains(cleanEndpoint, "signup") || strings.Contains(cleanEndpoint, "signin") || strings.Contains(cleanEndpoint, "password") {
 			reqBody = "[REDACTED/SENSITIVE]"

@@ -16,10 +16,7 @@ func Connect() {
 	if dbUser == "" {
 		dbUser = "root"
 	}
-	// dbPassword := os.Getenv("DB_PASSWORD")
-	// if dbPassword == "" {
-	// 	dbPassword = "pass"
-	// }
+
 	dbHost := os.Getenv("DB_HOST")
 	if dbHost == "" {
 		dbHost = "127.0.0.1"
@@ -36,7 +33,7 @@ func Connect() {
 	dsn := fmt.Sprintf("%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", dbUser, dbHost, dbPort, dbName)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal("cant connect to the database")
+		log.Fatalf("cant connect to the database: %v", err)
 	}
 
 	DB = db

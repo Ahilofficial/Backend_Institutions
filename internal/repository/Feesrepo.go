@@ -16,59 +16,135 @@ func NewFeesRepository(db *gorm.DB) *FeesRepository {
 	return &FeesRepository{db: db}
 }
 
-func (r *FeesRepository) CreateFees(fees *model.Fees) error {
+func (r *FeesRepository) CreateDepartmentFee(fee *model.Fees) error {
+	fee.StudentID = nil
+	if fee.Semester == 0 {
+		fee.Semester = 1
+	}
+	if fee.TotalAmount == 0 && (fee.CollegeAmount > 0 || fee.HostelAmount > 0) {
+		fee.TotalAmount = fee.CollegeAmount + fee.HostelAmount
+	}
+	fee.IsActive = true
+	return r.db.Create(fee).Error
+}
+
+func (r *FeesRepository) GetDepartmentFeeBySemester(departmentID uint, semester uint) (*model.Fees, error) {
+	var fee model.Fees
+	err := r.db.Raw(`
+		SELECT *
+		FROM fees
+		WHERE department_id = ?
+		  AND semester = ?
+		  AND student_id IS NULL
+		  AND is_active = true
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, departmentID, semester).Scan(&fee).Error
+
+	if err != nil {
+		return nil, err
+	}
+	if fee.ID == 0 {
+		return nil, errors.New("fee configuration not found for this department and semester")
+	}
+
+	return &fee, nil
+}
+
+func (r *FeesRepository) GetDepartmentFees(departmentID uint) ([]model.Fees, error) {
+	var fees []model.Fees
+	err := r.db.
+		Preload("Department").
+		Where("department_id = ? AND student_id IS NULL AND is_active = true AND deleted_at IS NULL", departmentID).
+		Order("semester ASC").
+		Find(&fees).Error
+
+	if err != nil {
+		return nil, err
+	}
+	return fees, nil
+}
+
+func (r *FeesRepository) UpdateDepartmentFee(fee *model.Fees) error {
+	if fee.TotalAmount == 0 && (fee.CollegeAmount > 0 || fee.HostelAmount > 0) {
+		fee.TotalAmount = fee.CollegeAmount + fee.HostelAmount
+	}
 	db, err := r.db.DB()
 	if err != nil {
 		return err
 	}
 
-	now := time.Now()
+	res, err := db.Exec(`
+		UPDATE fees
+		SET college_amount = ?, hostel_amount = ?, total_amount = ?, updated_at = ?
+		WHERE id = ? AND student_id IS NULL AND deleted_at IS NULL
+	`, fee.CollegeAmount, fee.HostelAmount, fee.TotalAmount, time.Now(), fee.ID)
 
-	var studentIDVal interface{}
-	if fees.StudentID > 0 {
-		studentIDVal = fees.StudentID
-	} else {
-		studentIDVal = nil
-	}
-
-	var departmentIDVal interface{}
-	if fees.DepartmentID > 0 {
-		departmentIDVal = fees.DepartmentID
-	} else {
-		departmentIDVal = nil
-	}
-
-	res, err := db.Exec(
-		`INSERT INTO fees
-		(payment_mode, total_amount, total_paid, pending_amount, student_id, department_id, created_at, updated_at, is_active)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		fees.PaymentMode,
-		fees.TotalAmount,
-		fees.TotalPaid,
-		fees.PendingAmount,
-		studentIDVal,
-		departmentIDVal,
-		now,
-		now,
-		true,
-	)
 	if err != nil {
 		return err
 	}
 
-	id, err := res.LastInsertId()
+	rows, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
+	if rows == 0 {
+		return errors.New("department fee not found or already deleted")
+	}
 
-	fees.ID = uint(id)
-	fees.IsActive = true
 	return nil
+}
+
+func (r *FeesRepository) DeleteDepartmentFee(id uint) error {
+	db, err := r.db.DB()
+	if err != nil {
+		return err
+	}
+
+	res, err := db.Exec(`
+		UPDATE fees
+		SET is_active = false, deleted_at = ?
+		WHERE id = ? AND student_id IS NULL AND deleted_at IS NULL
+	`, time.Now(), id)
+
+	if err != nil {
+		return err
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("department fee not found or already deleted")
+	}
+
+	return nil
+}
+
+func (r *FeesRepository) CreateFees(fees *model.Fees) error {
+	if fees.Semester == 0 {
+		fees.Semester = 1
+	}
+	fees.IsActive = true
+	return r.db.Create(fees).Error
+}
+
+func (r *FeesRepository) FetchFeeByStudentAndSemester(studentID uint, semester uint) (*model.Fees, error) {
+	var fee model.Fees
+	err := r.db.
+		Preload("Payments").
+		Where("student_id = ? AND semester = ? AND deleted_at IS NULL", studentID, semester).
+		First(&fee).Error
+	if err != nil {
+		return nil, err
+	}
+	return &fee, nil
 }
 
 func (r *FeesRepository) FetchFeeByDepartmentID(departmentID uint) (*model.Fees, error) {
 	var fee model.Fees
-	err := r.db.Where("department_id = ? AND deleted_at IS NULL", departmentID).First(&fee).Error
+	err := r.db.Where("department_id = ? AND student_id IS NULL AND deleted_at IS NULL", departmentID).First(&fee).Error
 	if err != nil {
 		return nil, err
 	}
@@ -98,16 +174,16 @@ func (r *FeesRepository) FetchFeesPaginated(search string, page, limit int) ([]m
 			)
 		`, searchPattern, searchPattern, searchPattern, searchPattern)
 
-	
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * limit
 
-	// Fetch fees with related payments
 	err := query.
 		Preload("Payments").
+		Preload("Student").
+		Preload("Department").
 		Order("id DESC").
 		Limit(limit).
 		Offset(offset).
@@ -125,6 +201,7 @@ func (r *FeesRepository) FetchFeesById(id uint) (model.Fees, error) {
 	err := r.db.
 		Preload("Student").
 		Preload("Payments").
+		Preload("Department").
 		Where("id = ? AND deleted_at IS NULL", id).
 		First(&fee).Error
 
@@ -159,16 +236,14 @@ func (r *FeesRepository) DeleteFees(id uint) error {
 
 func (r *FeesRepository) FetchUserStudentID(userID uint) (uint, error) {
 	var studentID uint
-	err:= r.db.Raw(`
-	select student_id from users where id=? and deleted_at is null
+	err := r.db.Raw(`
+		SELECT student_id FROM users WHERE id = ? AND deleted_at IS NULL
 	`, userID).Scan(&studentID).Error
 	if err != nil {
 		return 0, err
 	}
 	return studentID, nil
 }
-	
-
 
 func (r *FeesRepository) FetchInactiveFees() ([]model.Fees, error) {
 	var fees []model.Fees
@@ -186,12 +261,12 @@ func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
 
 	res, err := db.Exec(
 		`INSERT INTO payments
-		(month, amount_paid, payment_mode, fee_id, created_at, updated_at)
+		(amount_paid, payment_mode, fee_id, student_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
-		payment.Month,
 		payment.AmountPaid,
 		payment.PaymentMode,
 		payment.FeeID,
+		payment.StudentID,
 		now,
 		now,
 	)
@@ -308,19 +383,21 @@ func (r *FeesRepository) RecalculateFeeTotals(feeID uint, latestPaymentMode stri
 	return err
 }
 
-func (r *FeesRepository) FetchFeesByStudentID(studentID uint) (*model.Fees, error) {
-	var fees model.Fees
+func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, error) {
+	var fees []model.Fees
 
 	err := r.db.
 		Preload("Payments").
+		Preload("Department").
 		Where("student_id = ? AND deleted_at IS NULL", studentID).
-		First(&fees).Error
+		Order("semester ASC").
+		Find(&fees).Error
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &fees, nil
+	return fees, nil
 }
 
 func (r *FeesRepository) GetInstitutionByFeeID(feeID uint) (uint, error) {
@@ -329,14 +406,11 @@ func (r *FeesRepository) GetInstitutionByFeeID(feeID uint) (uint, error) {
 	err := r.db.Raw(`
 		SELECT d.institution_id
 		FROM fees fe
-		JOIN students s ON fe.student_id = s.id
-		JOIN faculties f ON s.faculty_id = f.id
-		JOIN departments d ON f.department_id = d.id
+		JOIN departments d ON fe.department_id = d.id
 		WHERE fe.id = ?
 		  AND fe.deleted_at IS NULL
-		  AND s.deleted_at IS NULL
-		  AND f.deleted_at IS NULL
 		  AND d.deleted_at IS NULL
+		LIMIT 1
 	`, feeID).Scan(&institutionID).Error
 
 	if err != nil {

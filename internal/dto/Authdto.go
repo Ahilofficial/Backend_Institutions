@@ -49,7 +49,6 @@ type AuthResponseDTO struct {
 	UserID       uint   `json:"user_id"`
 	SessionID    string `json:"session_id"`
 	Role         string `json:"role,omitempty"`
-	
 }
 
 type AssignRoleDTO struct {
@@ -66,7 +65,6 @@ type UserResponseDTO struct {
 	Role        string `json:"role,omitempty"`
 	StudentID   uint   `json:"student_id,omitempty"`
 	FacultyID   uint   `json:"faculty_id,omitempty"`
-	PrincipalID uint   `json:"principal_id,omitempty"`
 }
 
 var (
@@ -198,7 +196,6 @@ func ToUserResponseDTO(user *model.User) UserResponseDTO {
 
 	dto.StudentID = user.StudentID
 	dto.FacultyID = user.FacultyID
-	dto.PrincipalID = user.PrincipalID
 
 	if len(user.Roles) > 0 {
 		dto.Role = user.Roles[0].Name

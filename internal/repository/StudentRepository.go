@@ -1,12 +1,9 @@
 package repository
 
 import (
-	"errors"
-	"strings"
-	"time"
-
-	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
+	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -21,85 +18,173 @@ func NewStudentRepository(db *gorm.DB) *StudentRepository {
 	}
 }
 
-
-
 func (r *StudentRepository) CreateStudent(
 	student *model.Student,
 ) error {
-
-	db, err := r.db.DB()
-	if err != nil {
-		return err
+	if student.Semester == 0 {
+		student.Semester = 1
 	}
-
-	now := time.Now()
-
-	var userIDVal interface{} = nil
-	if student.UserID > 0 {
-		userIDVal = student.UserID
-	}
-
-	res, err := db.Exec(
-		`INSERT INTO students
-			(name, gender, hosteller, scholorship, mq, base_amount, fee_amount, faculty_id, user_id, created_at, updated_at, is_active)
-		SELECT ?, ?, ?, ?, ?, ?, ?, id, ?, ?, ?, ?
-		FROM faculties
-		WHERE id = ?
-		  AND deleted_at IS NULL
-		  AND is_active = true
-		  AND (? IS NULL OR NOT EXISTS (
-			  SELECT 1
-			  FROM students
-			  WHERE user_id = ?
-			    AND deleted_at IS NULL
-		  ))`,
-		student.Name,
-		student.Gender,
-		student.Hosteller,
-		student.Scholarship,
-		student.MQ,
-		student.BaseAmount,
-		student.FeeAmount,
-		userIDVal,
-		now,
-		now,
-		true,
-		student.FacultyID,
-		userIDVal,
-		userIDVal,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rows == 0 {
-		return errors.New("student profile already exists for this user, or parent faculty is inactive/invalid")
-	}
-
-	id, err := res.LastInsertId()
-	if err != nil {
-		return err
-	}
-
-	student.ID = uint(id)
-	student.CreatedAt = now
-	student.UpdatedAt = now
 	student.IsActive = true
-
-	if student.UserID != 0 {
-		db.Exec("UPDATE users SET student_id = ? WHERE id = ?", student.ID, student.UserID)
+	if err := r.db.Create(student).Error; err != nil {
+		return err
 	}
-
+	if student.UserID != 0 {
+		_ = r.db.Model(&model.User{}).Where("id = ? AND deleted_at IS NULL", student.UserID).Update("student_id", student.ID).Error
+	}
 	return nil
 }
 
+func (r *StudentRepository) CreateStudentWithFeeTx(student *model.Student, fee *model.Fees) error {
+	if student.Semester == 0 {
+		student.Semester = 1
+	}
+	student.IsActive = true
+	student.Pending = true
 
+	return r.db.Transaction(func(tx *gorm.DB) error {
+
+		if err := tx.Create(student).Error; err != nil {
+			return err
+		}
+
+		if student.UserID != 0 {
+			if err := tx.Model(&model.User{}).Where("id = ? AND deleted_at IS NULL", student.UserID).Update("student_id", student.ID).Error; err != nil {
+				return err
+			}
+		}
+
+		if fee != nil {
+			fee.StudentID = &student.ID
+			fee.Semester = student.Semester
+			fee.DepartmentID = student.DepartmentID
+			fee.IsActive = true
+			if err := tx.Create(fee).Error; err != nil {
+				return err
+			}
+
+			studentPayment := model.StudentPayment{
+				StudentID:   student.ID,
+				PaymentID:   fee.ID,
+				Semester:    student.Semester,
+				TotalAmount: fee.TotalAmount,
+				Status:      "pending",
+			}
+			if err := tx.Create(&studentPayment).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *StudentRepository) PromoteStudentTx(studentID uint, nextSemester uint, newBaseAmount float64, newFeeAmount float64, fee *model.Fees) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+
+		if err := tx.Model(&model.Student{}).Where("id = ? AND deleted_at IS NULL", studentID).Updates(map[string]interface{}{
+			"semester":    nextSemester,
+			"pending":     true,
+			"base_amount": newBaseAmount,
+			"fee_amount":  newFeeAmount,
+			"updated_at":  time.Now(),
+		}).Error; err != nil {
+			return err
+		}
+
+		if fee != nil {
+			fee.StudentID = &studentID
+			fee.Semester = nextSemester
+			fee.IsActive = true
+			if err := tx.Create(fee).Error; err != nil {
+				return err
+			}
+
+			studentPayment := model.StudentPayment{
+				StudentID:   studentID,
+				PaymentID:   fee.ID,
+				Semester:    nextSemester,
+				TotalAmount: newFeeAmount,
+				Status:      "pending",
+			}
+			if err := tx.Create(&studentPayment).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *StudentRepository) UpdateStudentSemesterTx(
+	studentID uint,
+	semester uint,
+	hosteller bool,
+	scholarship bool,
+	mq bool,
+	baseAmount float64,
+	feeAmount float64,
+	fee *model.Fees,
+) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		pending := true
+		if fee != nil && fee.PendingAmount == 0 && fee.TotalPaid > 0 {
+			pending = false
+		}
+
+		if err := tx.Model(&model.Student{}).Where("id = ? AND deleted_at IS NULL", studentID).Updates(map[string]interface{}{
+			"semester":    semester,
+			"hosteller":   hosteller,
+			"scholarship": scholarship,
+			"mq":          mq,
+			"base_amount": baseAmount,
+			"fee_amount":  feeAmount,
+			"pending":     pending,
+			"updated_at":  time.Now(),
+		}).Error; err != nil {
+			return err
+		}
+
+		if fee != nil {
+			fee.StudentID = &studentID
+			fee.Semester = semester
+			fee.IsActive = true
+			if fee.ID > 0 {
+				if err := tx.Save(fee).Error; err != nil {
+					return err
+				}
+			} else {
+				if err := tx.Create(fee).Error; err != nil {
+					return err
+				}
+			}
+
+			var sp model.StudentPayment
+			err := tx.Where("student_id = ? AND semester = ? AND deleted_at IS NULL", studentID, semester).First(&sp).Error
+			if err == nil && sp.ID > 0 {
+				sp.TotalAmount = fee.TotalAmount
+				if pending {
+					sp.Status = "pending"
+				}
+				_ = tx.Save(&sp).Error
+			} else {
+				status := "pending"
+				if !pending {
+					status = "paid"
+				}
+				newSp := model.StudentPayment{
+					StudentID:   studentID,
+					PaymentID:   fee.ID,
+					Semester:    semester,
+					TotalAmount: fee.TotalAmount,
+					Status:      status,
+				}
+				_ = tx.Create(&newSp).Error
+			}
+		}
+
+		return nil
+	})
+}
 
 func (r *StudentRepository) FetchByUserID(userID uint) (model.Student, error) {
 	var stud model.Student
@@ -129,8 +214,6 @@ func (r *StudentRepository) ExistsByUserID(
 	return exists, nil
 }
 
-
-
 func (r *StudentRepository) FetchStudent() ([]model.Student, error) {
 
 	var students []model.Student
@@ -148,8 +231,6 @@ func (r *StudentRepository) FetchStudent() ([]model.Student, error) {
 
 	return students, nil
 }
-
-
 
 func (r *StudentRepository) FetchStudentPaginated(
 	search string,
@@ -202,8 +283,6 @@ func (r *StudentRepository) FetchStudentPaginated(
 	return students, total, nil
 }
 
-
-
 func (r *StudentRepository) FetchStudentById(
 	id uint,
 ) (model.Student, error) {
@@ -224,7 +303,7 @@ func (r *StudentRepository) FetchStudentById(
 	return student, nil
 }
 
-func(r *StudentRepository)GetInstitutionIDForUserRepo(studentID uint)uint{
+func (r *StudentRepository) GetInstitutionIDForUserRepo(studentID uint) uint {
 	var students_institution_id uint
 	err := r.db.Raw(`
 		SELECT d.institution_id
@@ -240,7 +319,6 @@ func(r *StudentRepository)GetInstitutionIDForUserRepo(studentID uint)uint{
 
 	return students_institution_id
 }
-
 
 func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
 
@@ -258,34 +336,12 @@ func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
 	return students, nil
 }
 
-
-
 func (r *StudentRepository) GetActiveStudent() (model.Student, error) {
 
 	var student model.Student
 
 	err := r.db.
 		Where("is_active = ? AND deleted_at IS NULL", true).
-		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
-		First(&student).Error
-
-	if err != nil {
-		return model.Student{}, err
-	}
-
-	return student, nil
-}
-
-
-
-func (r *StudentRepository) GetInactiveStudent() (model.Student, error) {
-
-	var student model.Student
-
-	err := r.db.
-		Where("is_active = ? AND deleted_at IS NULL", false).
 		Preload("Faculty").
 		Preload("Fees").
 		Preload("Fees.Payments").
@@ -340,8 +396,6 @@ func (r *StudentRepository) DeleteStudent(id uint) error {
 	return nil
 }
 
-
-
 func (r *StudentRepository) UpdateStudentById(
 	student *model.Student,
 ) error {
@@ -367,19 +421,19 @@ func (r *StudentRepository) UpdateStudentById(
 	return err
 }
 
-func (r *StudentRepository) StudentVerificationRepo(access model.StudentVerificationAccess)error{
-	
-	err := r.db.Exec(
-    `INSERT INTO student_verification_accesses (student_id, faculty_id)
-     VALUES (?, ?)`,
-    access.StudentID,
-    access.FacultyID,
-).Error
-if err != nil {
-	return err
-}
+func (r *StudentRepository) StudentVerificationRepo(access model.StudentVerificationAccess) error {
+	if access.StudentID == 0 || access.FacultyID == 0 {
+		return nil
+	}
 
-return err
+	err := r.db.Exec(
+		`INSERT INTO student_verification_accesses (student_id, faculty_id, created_at, updated_at)
+     VALUES (?, ?, NOW(), NOW())
+     ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+		access.StudentID,
+		access.FacultyID,
+	).Error
+	return err
 }
 
 func (r *StudentRepository) HasStudentVerificationAccess(
@@ -405,227 +459,20 @@ func (r *StudentRepository) HasStudentVerificationAccess(
 	return count > 0, nil
 }
 
-
-
-func (r *StudentRepository) FetchStudentsByPaymentMonth(
-	month string,
-) ([]model.Student, error) {
-
-	var students []model.Student
-
-	err := r.db.
-		Model(&model.Student{}).
-		Joins("JOIN fees ON fees.student_id = students.id").
-		Joins("JOIN payments ON payments.fee_id = fees.id").
-		Where(`
-			students.deleted_at IS NULL
-			AND LOWER(payments.month) = LOWER(?)
-		`, month).
-		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
-		Distinct().
-		Find(&students).Error
-
+func (r *StudentRepository) GetCourseDurationByFacultyIDRepo(FacultyID uint) (uint, error) {
+	var courseDuration uint
+	err := r.db.Raw(`
+		SELECT d.course_duration
+		FROM faculties f
+		JOIN departments d ON f.department_id = d.id
+		WHERE f.id = ? AND f.deleted_at IS NULL AND d.deleted_at IS NULL
+		LIMIT 1
+	`, FacultyID).Scan(&courseDuration).Error
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return students, nil
-}
-
-
-func (r *StudentRepository) FetchPaidStudents() ([]model.Student, error) {
-	return r.FetchPaidStudentsByMonth(0, 0, "")
-}
-
-func (r *StudentRepository) FetchPaidStudentsByMonth(instID uint, facultyID uint, month string) ([]model.Student, error) {
-	var students []model.Student
-
-	dbQuery := r.db.Model(&model.Student{}).
-		Joins("JOIN faculties f ON f.id = students.faculty_id").
-		Joins("JOIN departments d ON d.id = f.department_id").
-		Joins("JOIN fees ON fees.student_id = students.id").
-		Joins("JOIN payments ON payments.fee_id = fees.id").
-		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL AND fees.deleted_at IS NULL AND payments.deleted_at IS NULL AND payments.amount_paid > 0")
-
-	if strings.TrimSpace(month) != "" {
-		dbQuery = dbQuery.Where("LOWER(TRIM(payments.month)) = LOWER(TRIM(?))", strings.TrimSpace(month))
-	}
-
-	if facultyID > 0 {
-		dbQuery = dbQuery.Where("students.faculty_id = ?", facultyID)
-	} else if instID > 0 {
-		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
-	}
-
-	err := dbQuery.
-		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
-		Distinct().
-		Find(&students).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return students, nil
-}
-
-func (r *StudentRepository) FetchNotPaidStudents() ([]model.Student, error) {
-	return r.FetchNotPaidStudentsByMonth(0, 0, "")
-}
-
-
-func (r *StudentRepository) FetchNotPaidStudentsByMonth(instID uint, facultyID uint, month string) ([]model.Student, error) {
-	var students []model.Student
-
-	m := strings.TrimSpace(month)
-
-	dbQuery := r.db.Model(&model.Student{}).
-		Joins("JOIN faculties f ON f.id = students.faculty_id").
-		Joins("JOIN departments d ON d.id = f.department_id").
-		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
-
-	if m != "" {
-		dbQuery = dbQuery.Where(`students.id NOT IN (
-			SELECT fe.student_id 
-			FROM fees fe 
-			JOIN payments p ON p.fee_id = fe.id 
-			WHERE LOWER(TRIM(p.month)) = LOWER(TRIM(?)) 
-			  AND p.deleted_at IS NULL 
-			  AND fe.deleted_at IS NULL 
-			  AND p.amount_paid > 0
-		)`, m)
-	} else {
-		dbQuery = dbQuery.Where(`students.id NOT IN (
-			SELECT student_id 
-			FROM fees 
-			WHERE deleted_at IS NULL AND total_amount <= total_paid
-		)`)
-	}
-
-	if facultyID > 0 {
-		dbQuery = dbQuery.Where("students.faculty_id = ?", facultyID)
-	} else if instID > 0 {
-		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
-	}
-
-	err := dbQuery.
-		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
-		Distinct().
-		Find(&students).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return students, nil
-}
-
-
-
-func( r *StudentRepository)GetCourseDurationByFacultyIDRepo(FacultyID uint)(uint,error){
-	var department_id uint
-	var course_duration uint
-	dep_err:=r.db.Raw("SELECT department_id from faculties where id=?",FacultyID).Scan(&department_id).Error
-	if dep_err!=nil{
-		return 0,dep_err
-	}
-	c_error:=r.db.Raw(`select course_duration from department where id =?`,department_id).Scan(&course_duration).Error
-	if c_error!=nil{
-		return 0,c_error
-	}
-
-	return course_duration,nil
-	}
-func (r *StudentRepository) FetchAllStudentsMonthOverview(instID uint, facultyID uint, month string) (dto.MonthlyStudentsOverviewDTO, error) {
-	m := strings.TrimSpace(month)
-
-	dbQuery := r.db.Model(&model.Student{}).
-		Joins("JOIN faculties f ON f.id = students.faculty_id").
-		Joins("JOIN departments d ON d.id = f.department_id").
-		Where("students.deleted_at IS NULL AND f.deleted_at IS NULL AND d.deleted_at IS NULL")
-
-	if facultyID > 0 {
-		dbQuery = dbQuery.Where("students.faculty_id = ?", facultyID)
-	} else if instID > 0 {
-		dbQuery = dbQuery.Where("d.institution_id = ?", instID)
-	}
-
-	var students []model.Student
-	err := dbQuery.
-		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
-		Distinct().
-		Find(&students).Error
-	if err != nil {
-		return dto.MonthlyStudentsOverviewDTO{}, err
-	}
-
-	overview := dto.MonthlyStudentsOverviewDTO{
-		Month:         m,
-		InstitutionID: instID,
-		TotalStudents: len(students),
-		Students:      make([]dto.StudentMonthlyStatusDTO, 0, len(students)),
-	}
-
-	for _, s := range students {
-		item := dto.StudentMonthlyStatusDTO{
-			StudentID:     s.ID,
-			StudentName:   s.Name,
-			Gender:        s.Gender,
-			FacultyID:     s.FacultyID,
-			InstitutionID: instID,
-			Month:         m,
-			IsPaid:        false,
-			AmountPaid:    0,
-		}
-
-		if s.Faculty.ID > 0 {
-			item.FacultyName = s.Faculty.Name
-			item.DepartmentID = s.Faculty.DepartmentID
-		}
-
-		var totalFee, pendingFee float64
-		for _, fee := range s.Fees {
-			if fee.DeletedAt.Valid {
-				continue
-			}
-			totalFee += fee.TotalAmount
-			pendingFee += fee.PendingAmount
-
-			for _, p := range fee.Payments {
-				if p.DeletedAt.Valid {
-					continue
-				}
-				if m != "" && strings.EqualFold(strings.TrimSpace(p.Month), m) && p.AmountPaid > 0 {
-					item.IsPaid = true
-					item.AmountPaid += p.AmountPaid
-					if item.PaymentMode == "" {
-						item.PaymentMode = p.PaymentMode
-					}
-				}
-			}
-		}
-
-		item.TotalFee = totalFee
-		item.PendingFee = pendingFee
-
-		if item.IsPaid {
-			overview.PaidStudentsCount++
-		} else {
-			overview.UnpaidStudentsCount++
-		}
-
-		overview.Students = append(overview.Students, item)
-	}
-
-	return overview, nil
+	return courseDuration, nil
 }
 
 func (r *StudentRepository) FetchStudentByInstitution(instID uint) ([]model.Student, error) {
@@ -697,8 +544,6 @@ func (r *StudentRepository) FetchStudentPaginatedWithInstitution(
 	return students, total, nil
 }
 
-
-
 func (r *StudentRepository) GetStudentVerificationAccess(
 	studentID uint,
 	facultyID uint,
@@ -759,6 +604,23 @@ func (r *StudentRepository) GetInstitutionByStudentID(studentID uint) (uint, err
 
 func (r *StudentRepository) CreateStudentPayment(payment *model.StudentPayment) error {
 	return r.db.Create(payment).Error
+}
+
+func (r *StudentRepository) UpsertStudentPayment(payment *model.StudentPayment) error {
+	var existing model.StudentPayment
+	err := r.db.Where("student_id = ? AND semester = ? AND deleted_at IS NULL", payment.StudentID, payment.Semester).First(&existing).Error
+	if err == nil && existing.ID > 0 {
+		existing.PaymentID = payment.PaymentID
+		existing.TotalAmount = payment.TotalAmount
+		existing.Status = payment.Status
+		existing.UpdatedAt = time.Now()
+		return r.db.Save(&existing).Error
+	}
+	return r.db.Create(payment).Error
+}
+
+func (r *StudentRepository) UpdateStudentPendingStatus(studentID uint, pending bool) error {
+	return r.db.Model(&model.Student{}).Where("id = ? AND deleted_at IS NULL", studentID).Update("pending", pending).Error
 }
 
 func (r *StudentRepository) FetchStudentPaymentsByStudentID(studentID uint) ([]model.StudentPayment, error) {
