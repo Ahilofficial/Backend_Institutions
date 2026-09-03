@@ -138,6 +138,7 @@ func (s *UserService) SignUpWithRole(
 	if err := s.userrepo.CreateUser(&user); err != nil {
 		return model.User{}, err
 	}
+	
 
 	// 7. Map user with role
 	if err := s.userrepo.AssignRole(user.ID, role.ID); err != nil {
@@ -174,18 +175,12 @@ func (s *UserService) SignUpWithRole(
 	// 10. Send email in background
 	go func(email, subject, body string) {
 
-		if err := grpc.SendEmail(
+		 grpc.SendEmail(
 			email,
 			subject,
 			body,
 			"signup",
-		); err != nil {
-			log.Printf(
-				"Failed to send verification email: %v",
-				err,
-			)
-		}
-
+		); 
 	}(user.Email, subject, body)
 
 	return user, nil

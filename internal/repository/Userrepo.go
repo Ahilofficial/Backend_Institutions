@@ -355,55 +355,47 @@ func (r *UserRepository) UpdateUser(user *model.User) error {
 	).Error
 }
 
+
 // CreateUser inserts a new user record after verifying uniqueness of email and phone
 func (r *UserRepository) CreateUser(user *model.User) error {
-	db, err := r.db.DB()
+
+	//phone no exists
+	
+	var phonecount uint
+
+	err:=r.db.Raw(`select count(*) from users where phone=?`,user.Phone).Scan(&phonecount).Error
 	if err != nil {
 		return err
 	}
-	now := time.Now()
-
-	var tokenVal any = user.VerificationToken
-	if user.VerificationToken == "" {
-		tokenVal = nil
+	if phonecount>0{
+		return errors.New("Phone number  already there")
 	}
-
-	var expiresAt any = user.TokenExpiresAt
-	if user.TokenExpiresAt.IsZero() {
-		expiresAt = nil
+	var emailcount uint
+	email_err:=r.db.Raw(`select count(*) from users where email=?`,user.Email).Scan(&emailcount).Error
+	if email_err != nil {
+		return email_err
 	}
-
-	// 1. Verify email uniqueness
-	var activeEmailCount int
-	_ = db.QueryRow("SELECT COUNT(*) FROM users WHERE email = ? AND deleted_at IS NULL", user.Email).Scan(&activeEmailCount)
-	if activeEmailCount > 0 {
-		return errors.New("email already exists")
+	if emailcount>0{
+		return errors.New("Email  already there")
 	}
+	 now := time.Now()
+	 var tokenVal any = user.VerificationToken
+	 var expiresAt any = user.TokenExpiresAt
 
-	// 2. Verify phone uniqueness
-	var activePhoneCount int
-	_ = db.QueryRow("SELECT COUNT(*) FROM users WHERE phone = ? AND deleted_at IS NULL", user.Phone).Scan(&activePhoneCount)
-	if activePhoneCount > 0 {
-		return errors.New("phone number already exists")
-	}
-
-	// 3. Insert user record
 	query := `
 		INSERT INTO users (name, email, phone, password, is_active, is_verified, verification_token, token_expires_at, created_at, updated_at) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-	res, err := db.Exec(
-		query,
-		user.Name, user.Email, user.Phone, user.Password, user.IsActive, user.IsVerified, tokenVal, expiresAt, now, now,
-	)
-	if err != nil {
-		return err
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	result:=r.db.Exec(query, user.Name, user.Email, user.Phone, user.Password, user.IsActive, user.IsVerified, tokenVal, expiresAt, now, now,)
+	if result.Error!=nil{
+		return result.Error
 	}
-	id, err := res.LastInsertId()
-	if err == nil {
-		user.ID = uint(id)
-	}
+
+	if result.RowsAffected == 0 {
+	return errors.New("user was not created")
+}
+
 	return nil
+
 }
 
 // FindByEmail finds a user record by email
