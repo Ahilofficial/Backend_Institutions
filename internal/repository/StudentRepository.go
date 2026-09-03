@@ -34,43 +34,154 @@ func (r *StudentRepository) CreateStudent(
 	return nil
 }
 
-func (r *StudentRepository) CreateStudentWithFeeTx(student *model.Student, fee *model.Fees) error {
+func (r *StudentRepository) CreateStudentWithFeeTx(
+	student *model.Student,
+	fee *model.Fees,
+) error {
+
 	if student.Semester == 0 {
 		student.Semester = 1
 	}
+
 	student.IsActive = true
 	student.Pending = true
 
 	return r.db.Transaction(func(tx *gorm.DB) error {
 
-		if err := tx.Create(student).Error; err != nil {
+		result := tx.Exec(`
+			INSERT INTO students (
+				user_id,
+				faculty_id,
+				department_id,
+				name,
+				gender,
+				semester,
+				hosteller,
+				scholarship,
+				mq,
+				base_amount,
+				fee_amount,
+				is_active,
+				pending,
+				is_profile_verified,
+				created_at,
+				updated_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+		`,
+			student.UserID,
+			student.FacultyID,
+			student.DepartmentID,
+			student.Name,
+			student.Gender,
+			student.Semester,
+			student.Hosteller,
+			student.Scholarship,
+			student.MQ,
+			student.BaseAmount,
+			student.FeeAmount,
+			student.IsActive,
+			student.Pending,
+			student.IsProfileVerified,
+		)
+
+		if result.Error != nil {
+			return result.Error
+		}
+
+		var studentID uint
+
+		if err := tx.Raw(`
+			SELECT LAST_INSERT_ID() AS id
+		`).Scan(&studentID).Error; err != nil {
 			return err
 		}
 
+		student.ID = studentID
+
 		if student.UserID != 0 {
-			if err := tx.Model(&model.User{}).Where("id = ? AND deleted_at IS NULL", student.UserID).Update("student_id", student.ID).Error; err != nil {
-				return err
+
+			result = tx.Exec(`
+				UPDATE users
+				SET student_id = ?,
+				    updated_at = NOW()
+				WHERE id = ?
+				  AND deleted_at IS NULL
+			`,
+				student.ID,
+				student.UserID,
+			)
+
+			if result.Error != nil {
+				return result.Error
 			}
 		}
 
 		if fee != nil {
+
 			fee.StudentID = &student.ID
 			fee.Semester = student.Semester
 			fee.DepartmentID = student.DepartmentID
 			fee.IsActive = true
-			if err := tx.Create(fee).Error; err != nil {
+
+			result = tx.Exec(`
+				INSERT INTO fees (
+					student_id,
+					department_id,
+					semester,
+					total_amount,
+					total_paid,
+					pending_amount,
+					is_active,
+					created_at,
+					updated_at
+				)
+				VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+			`,
+				student.ID,
+				fee.DepartmentID,
+				fee.Semester,
+				fee.TotalAmount,
+				fee.TotalPaid,
+				fee.PendingAmount,
+				fee.IsActive,
+			)
+
+			if result.Error != nil {
+				return result.Error
+			}
+
+			var feeID uint
+
+			if err := tx.Raw(`
+				SELECT LAST_INSERT_ID() AS id
+			`).Scan(&feeID).Error; err != nil {
 				return err
 			}
 
-			studentPayment := model.StudentPayment{
-				StudentID:   student.ID,
-				PaymentID:   fee.ID,
-				Semester:    student.Semester,
-				TotalAmount: fee.TotalAmount,
-				Status:      "pending",
-			}
-			if err := tx.Create(&studentPayment).Error; err != nil {
-				return err
+			fee.ID = feeID
+
+			result = tx.Exec(`
+				INSERT INTO student_payments (
+					student_id,
+					payment_id,
+					semester,
+					total_amount,
+					status,
+					created_at,
+					updated_at
+				)
+				VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+			`,
+				student.ID,
+				fee.ID,
+				student.Semester,
+				fee.TotalAmount,
+				"pending",
+			)
+
+			if result.Error != nil {
+				return result.Error
 			}
 		}
 
@@ -78,42 +189,6 @@ func (r *StudentRepository) CreateStudentWithFeeTx(student *model.Student, fee *
 	})
 }
 
-func (r *StudentRepository) PromoteStudentTx(studentID uint, nextSemester uint, newBaseAmount float64, newFeeAmount float64, fee *model.Fees) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-
-		if err := tx.Model(&model.Student{}).Where("id = ? AND deleted_at IS NULL", studentID).Updates(map[string]interface{}{
-			"semester":    nextSemester,
-			"pending":     true,
-			"base_amount": newBaseAmount,
-			"fee_amount":  newFeeAmount,
-			"updated_at":  time.Now(),
-		}).Error; err != nil {
-			return err
-		}
-
-		if fee != nil {
-			fee.StudentID = &studentID
-			fee.Semester = nextSemester
-			fee.IsActive = true
-			if err := tx.Create(fee).Error; err != nil {
-				return err
-			}
-
-			studentPayment := model.StudentPayment{
-				StudentID:   studentID,
-				PaymentID:   fee.ID,
-				Semester:    nextSemester,
-				TotalAmount: newFeeAmount,
-				Status:      "pending",
-			}
-			if err := tx.Create(&studentPayment).Error; err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
-}
 
 func (r *StudentRepository) UpdateStudentSemesterTx(
 	studentID uint,

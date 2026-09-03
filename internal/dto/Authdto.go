@@ -26,7 +26,7 @@ type SignUpDTO struct {
 	Email    string `json:"email"`
 	Phone    string `json:"phone"`
 	Password string `json:"password"`
-	Role     string `json:"role,omitempty"`
+	// Role     string `json:"role,omitempty"`
 }
 
 type SignInDTO struct {
@@ -76,7 +76,7 @@ func (dto *SignUpDTO) Sanitize() {
 	dto.Name = strings.TrimSpace(dto.Name)
 	dto.Email = strings.TrimSpace(strings.ToLower(dto.Email))
 	dto.Phone = strings.TrimSpace(dto.Phone)
-	dto.Role = strings.TrimSpace(strings.ToLower(dto.Role))
+	// dto.Role = strings.TrimSpace(strings.ToLower(dto.Role))
 }
 
 func (dto *SignUpDTO) Validate() error {

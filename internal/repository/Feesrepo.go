@@ -8,26 +8,35 @@ import (
 	"gorm.io/gorm"
 )
 
+// FeesRepository handles persistence and queries for department fee templates, student fees, and payments
 type FeesRepository struct {
 	db *gorm.DB
 }
 
+// NewFeesRepository initializes a new instance of FeesRepository
 func NewFeesRepository(db *gorm.DB) *FeesRepository {
 	return &FeesRepository{db: db}
 }
 
+// CreateDepartmentFee inserts a department semester fee configuration template
 func (r *FeesRepository) CreateDepartmentFee(fee *model.Fees) error {
-	fee.StudentID = nil
-	if fee.Semester == 0 {
-		fee.Semester = 1
-	}
-	if fee.TotalAmount == 0 && (fee.CollegeAmount > 0 || fee.HostelAmount > 0) {
-		fee.TotalAmount = fee.CollegeAmount + fee.HostelAmount
-	}
-	fee.IsActive = true
-	return r.db.Create(fee).Error
+	// 1. Insert fee template with NULL student_id
+	err := r.db.Exec(`
+INSERT INTO fees (department_id, semester, college_amount, hostel_amount, total_amount, pending_amount, payment_mode, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		fee.DepartmentID,
+		fee.Semester,
+		fee.CollegeAmount,
+		fee.HostelAmount,
+		fee.TotalAmount,
+		fee.PendingAmount,
+		fee.PaymentMode,
+		fee.IsActive,
+	).Error
+
+	return err
 }
 
+// GetDepartmentFeeBySemester retrieves department fee template for a semester
 func (r *FeesRepository) GetDepartmentFeeBySemester(departmentID uint, semester uint) (*model.Fees, error) {
 	var fee model.Fees
 	err := r.db.Raw(`
@@ -51,6 +60,7 @@ func (r *FeesRepository) GetDepartmentFeeBySemester(departmentID uint, semester 
 	return &fee, nil
 }
 
+// GetDepartmentFees retrieves all fee templates for a department ordered by semester
 func (r *FeesRepository) GetDepartmentFees(departmentID uint) ([]model.Fees, error) {
 	var fees []model.Fees
 	err := r.db.
@@ -65,6 +75,7 @@ func (r *FeesRepository) GetDepartmentFees(departmentID uint) ([]model.Fees, err
 	return fees, nil
 }
 
+// UpdateDepartmentFee updates amounts for a department fee template
 func (r *FeesRepository) UpdateDepartmentFee(fee *model.Fees) error {
 	if fee.TotalAmount == 0 && (fee.CollegeAmount > 0 || fee.HostelAmount > 0) {
 		fee.TotalAmount = fee.CollegeAmount + fee.HostelAmount
@@ -74,6 +85,7 @@ func (r *FeesRepository) UpdateDepartmentFee(fee *model.Fees) error {
 		return err
 	}
 
+	// 1. Execute update query
 	res, err := db.Exec(`
 		UPDATE fees
 		SET college_amount = ?, hostel_amount = ?, total_amount = ?, updated_at = ?
@@ -84,6 +96,7 @@ func (r *FeesRepository) UpdateDepartmentFee(fee *model.Fees) error {
 		return err
 	}
 
+	// 2. Verify affected rows
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return err
@@ -95,12 +108,14 @@ func (r *FeesRepository) UpdateDepartmentFee(fee *model.Fees) error {
 	return nil
 }
 
+// DeleteDepartmentFee soft deletes a department fee template
 func (r *FeesRepository) DeleteDepartmentFee(id uint) error {
 	db, err := r.db.DB()
 	if err != nil {
 		return err
 	}
 
+	// 1. Execute soft delete query
 	res, err := db.Exec(`
 		UPDATE fees
 		SET is_active = false, deleted_at = ?
@@ -111,6 +126,7 @@ func (r *FeesRepository) DeleteDepartmentFee(id uint) error {
 		return err
 	}
 
+	// 2. Verify rows affected
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return err
@@ -122,6 +138,7 @@ func (r *FeesRepository) DeleteDepartmentFee(id uint) error {
 	return nil
 }
 
+// CreateFees inserts a student fee record
 func (r *FeesRepository) CreateFees(fees *model.Fees) error {
 	if fees.Semester == 0 {
 		fees.Semester = 1
@@ -130,6 +147,7 @@ func (r *FeesRepository) CreateFees(fees *model.Fees) error {
 	return r.db.Create(fees).Error
 }
 
+// FetchFeeByStudentAndSemester fetches a fee record for a specific student and semester
 func (r *FeesRepository) FetchFeeByStudentAndSemester(studentID uint, semester uint) (*model.Fees, error) {
 	var fee model.Fees
 	err := r.db.
@@ -142,6 +160,7 @@ func (r *FeesRepository) FetchFeeByStudentAndSemester(studentID uint, semester u
 	return &fee, nil
 }
 
+// FetchFeeByDepartmentID retrieves template fee record for department
 func (r *FeesRepository) FetchFeeByDepartmentID(departmentID uint) (*model.Fees, error) {
 	var fee model.Fees
 	err := r.db.Where("department_id = ? AND student_id IS NULL AND deleted_at IS NULL", departmentID).First(&fee).Error
@@ -151,18 +170,21 @@ func (r *FeesRepository) FetchFeeByDepartmentID(departmentID uint) (*model.Fees,
 	return &fee, nil
 }
 
+// FetchFees retrieves all fee records
 func (r *FeesRepository) FetchFees() ([]model.Fees, error) {
 	var fees []model.Fees
 	err := r.db.Raw("SELECT * FROM fees WHERE deleted_at IS NULL").Scan(&fees).Error
 	return fees, err
 }
 
+// FetchFeesPaginated retrieves paginated fee records with optional search
 func (r *FeesRepository) FetchFeesPaginated(search string, page, limit int) ([]model.Fees, int64, error) {
 	var fees []model.Fees
 	var total int64
 
 	searchPattern := "%" + search + "%"
 
+	// 1. Build query with search filter
 	query := r.db.Model(&model.Fees{}).
 		Where(`
 			deleted_at IS NULL
@@ -174,12 +196,14 @@ func (r *FeesRepository) FetchFeesPaginated(search string, page, limit int) ([]m
 			)
 		`, searchPattern, searchPattern, searchPattern, searchPattern)
 
+	// 2. Count total matches
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * limit
 
+	// 3. Query paginated results with preloads
 	err := query.
 		Preload("Payments").
 		Preload("Student").
@@ -195,6 +219,7 @@ func (r *FeesRepository) FetchFeesPaginated(search string, page, limit int) ([]m
 	return fees, total, nil
 }
 
+// FetchFeesById retrieves a fee record by primary key ID with associated relations
 func (r *FeesRepository) FetchFeesById(id uint) (model.Fees, error) {
 	var fee model.Fees
 
@@ -212,6 +237,7 @@ func (r *FeesRepository) FetchFeesById(id uint) (model.Fees, error) {
 	return fee, nil
 }
 
+// DeleteFees soft deletes a fee record
 func (r *FeesRepository) DeleteFees(id uint) error {
 	db, err := r.db.DB()
 	if err != nil {
@@ -234,6 +260,7 @@ func (r *FeesRepository) DeleteFees(id uint) error {
 	return nil
 }
 
+// FetchUserStudentID retrieves student_id for a given user_id
 func (r *FeesRepository) FetchUserStudentID(userID uint) (uint, error) {
 	var studentID uint
 	err := r.db.Raw(`
@@ -245,13 +272,16 @@ func (r *FeesRepository) FetchUserStudentID(userID uint) (uint, error) {
 	return studentID, nil
 }
 
+// FetchInactiveFees retrieves all deactivated fee records
 func (r *FeesRepository) FetchInactiveFees() ([]model.Fees, error) {
 	var fees []model.Fees
 	err := r.db.Raw("SELECT * FROM fees WHERE is_active = ? AND deleted_at IS NULL", false).Scan(&fees).Error
 	return fees, err
 }
 
+// CreatePayment inserts a payment transaction record into the payments table
 func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
+	// 1. Get raw database handle
 	db, err := r.db.DB()
 	if err != nil {
 		return err
@@ -259,8 +289,9 @@ func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
 
 	now := time.Now()
 
+	// 2. Insert payment transaction
 	res, err := db.Exec(
-		`INSERT INTO payments
+		`INSERT INTO payments 
 		(amount_paid, payment_mode, fee_id, student_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
 		payment.AmountPaid,
@@ -274,6 +305,7 @@ func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
 		return err
 	}
 
+	// 3. Set generated payment ID
 	id, err := res.LastInsertId()
 	if err != nil {
 		return err
@@ -286,6 +318,7 @@ func (r *FeesRepository) CreatePayment(payment *model.Payment) error {
 	return nil
 }
 
+// FetchPaymentByFeeID retrieves all payments associated with a fee ID
 func (r *FeesRepository) FetchPaymentByFeeID(feeID uint) ([]model.Payment, error) {
 	var payments []model.Payment
 
@@ -304,6 +337,7 @@ func (r *FeesRepository) FetchPaymentByFeeID(feeID uint) ([]model.Payment, error
 	return payments, nil
 }
 
+// FetchPaymentByID retrieves a single payment transaction by ID
 func (r *FeesRepository) FetchPaymentByID(id uint) (model.Payment, error) {
 	var payment model.Payment
 
@@ -319,6 +353,7 @@ func (r *FeesRepository) FetchPaymentByID(id uint) (model.Payment, error) {
 	return payment, nil
 }
 
+// UpdateFeesById updates payment mode and balances on a fee record
 func (r *FeesRepository) UpdateFeesById(fees *model.Fees) error {
 	db, err := r.db.DB()
 	if err != nil {
@@ -344,27 +379,33 @@ func (r *FeesRepository) UpdateFeesById(fees *model.Fees) error {
 	return err
 }
 
+// RecalculateFeeTotals calculates total paid amount from all payments and updates pending balance
 func (r *FeesRepository) RecalculateFeeTotals(feeID uint, latestPaymentMode string) error {
+	// 1. Fetch all payment records for this fee
 	var payments []model.Payment
 	if err := r.db.Where("fee_id = ? AND deleted_at IS NULL", feeID).Find(&payments).Error; err != nil {
 		return err
 	}
 
+	// 2. Sum paid amount in Go
 	var totalPaid float64
 	for _, p := range payments {
 		totalPaid += p.AmountPaid
 	}
 
+	// 3. Fetch fee record
 	var fee model.Fees
 	if err := r.db.Where("id = ? AND deleted_at IS NULL", feeID).First(&fee).Error; err != nil {
 		return err
 	}
 
+	// 4. Calculate pending balance
 	pendingAmount := fee.TotalAmount - totalPaid
 	if pendingAmount < 0 {
 		pendingAmount = 0
 	}
 
+	// 5. Update fee record
 	updates := map[string]interface{}{
 		"total_paid":     totalPaid,
 		"pending_amount": pendingAmount,
@@ -377,6 +418,7 @@ func (r *FeesRepository) RecalculateFeeTotals(feeID uint, latestPaymentMode stri
 	return r.db.Model(&model.Fees{}).Where("id = ? AND deleted_at IS NULL", feeID).Updates(updates).Error
 }
 
+// FetchFeesByStudentID retrieves all fees for a student ordered by semester
 func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, error) {
 	var fees []model.Fees
 
@@ -394,6 +436,7 @@ func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, err
 	return fees, nil
 }
 
+// GetInstitutionByFeeID resolves the institution ID owning a fee via department relationship
 func (r *FeesRepository) GetInstitutionByFeeID(feeID uint) (uint, error) {
 	var fee model.Fees
 	err := r.db.

@@ -250,6 +250,9 @@ func (s *StudentService) FetchAllStudentsPaginatedServicesScoped(
 	return s.studentRepo.FetchStudentPaginated(search, page, limit)
 }
 
+func(s *StudentService) GetUserStudentIDService(userID uint) (uint, error) {
+	return s.userRepo.GetUserStudentID(userID)
+}
 func (s *StudentService) GetStudentServiceById(
 	userID uint,
 	id uint,
@@ -312,6 +315,8 @@ func (s *StudentService) GetLoggedInStudentProfile(userID uint) (*model.Student,
 	}
 	return s.GetStudentServiceById(userID, studentID)
 }
+
+
 
 func (s *StudentService) resolveInstitutionScope(userID uint, requestedInstID uint) (uint, error) {
 	isInstAdmin, assignedInstID, _ := s.userRepo.IsInstitutionAdmin(userID)
@@ -472,9 +477,6 @@ func (s *StudentService) PromoteStudentService(
 		IsActive:      true,
 	}
 
-	if err := s.studentRepo.PromoteStudentTx(student.ID, nextSemester, baseFee, newFeeAmount, &newFee); err != nil {
-		return nil, nil, err
-	}
 
 	student.Semester = nextSemester
 	student.BaseAmount = baseFee

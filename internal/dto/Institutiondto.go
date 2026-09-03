@@ -72,12 +72,10 @@ type InstitutionResponseDTO struct {
 func ToInstitutionResponseDTO(inst *model.Institutions) InstitutionResponseDTO {
 	var dto InstitutionResponseDTO
 	copier.Copy(&dto, inst)
-
 	dto.Departments = make([]DepartmentResponseDTO, len(inst.Departments))
 	for i := range inst.Departments {
 		dto.Departments[i] = ToDepartmentResponseDTO(&inst.Departments[i])
 	}
-
 	return dto
 }
 

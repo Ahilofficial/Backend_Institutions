@@ -15,12 +15,15 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// Injectors from wire.go:
+
 func InitializeApp() (*fiber.App, error) {
 	db := database.NewDB()
 	userRepository := repository.NewUserRepository(db)
 	sessionRepository := repository.NewSessionRepository(db)
 	sessionService := services.NewSessionService(sessionRepository)
-	userService := services.NewUserService(userRepository, sessionService)
+	roleRepository := repository.NewRoleRepository(db)
+	userService := services.NewUserService(userRepository, sessionService, roleRepository)
 	userController := controller.NewUserController(userService)
 	institutionRepository := repository.NewInstitutionRepository(db)
 	instituteService := services.NewInstituteService(institutionRepository, userRepository)
@@ -28,7 +31,7 @@ func InitializeApp() (*fiber.App, error) {
 	departmentRepository := repository.NewDepartmentRepository(db)
 	departmentService := services.NewDepartmentService(departmentRepository, userRepository)
 	facultyRepository := repository.NewFacultyRepository(db)
-	facultyService := services.NewFacultyService(facultyRepository, departmentRepository, userRepository,institutionRepository)
+	facultyService := services.NewFacultyService(facultyRepository, departmentRepository, userRepository, institutionRepository)
 	departmentController := controller.NewDepartmentController(departmentService, instituteService, facultyService)
 	facultyController := controller.NewFacultyController(facultyService, userService, instituteService)
 	studentRepository := repository.NewStudentRepository(db)
@@ -36,13 +39,9 @@ func InitializeApp() (*fiber.App, error) {
 	studentService := services.NewStudentService(studentRepository, facultyRepository, userRepository, departmentRepository, feesRepository)
 	studentController := controller.NewStudentController(studentService, userService, instituteService, facultyService)
 	feesService := services.NewFeesService(feesRepository, studentRepository, userRepository, departmentRepository)
-	feesController := controller.NewFeesController(feesService)
-	roleRepository := repository.NewRoleRepository(db)
+	feesController := controller.NewFeesController(feesService, studentService)
 	roleService := services.NewRoleService(roleRepository)
 	roleController := controller.NewRoleController(roleService)
-	menuRepository := repository.NewMenuRepository(db)
-	menuService := services.NewMenuService(menuRepository)
-	menuController := controller.NewMenuController(menuService)
-	app := routes.NewApp(userController, instituteController, departmentController, facultyController, studentController, feesController, roleController, menuController)
+	app := routes.NewApp(userController, instituteController, departmentController, facultyController, studentController, feesController, roleController)
 	return app, nil
 }

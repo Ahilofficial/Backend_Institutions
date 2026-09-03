@@ -86,6 +86,7 @@ type StudentFacultyDTO struct {
 	DepartmentID uint   `json:"department_id"`
 }
 
+
 type StudentResponseDTO struct {
 	ID          uint   `json:"id"`
 	Name        string `json:"name"`

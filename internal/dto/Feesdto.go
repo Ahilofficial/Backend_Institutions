@@ -4,14 +4,12 @@ import (
 	"backend_institutions/internal/model"
 	"errors"
 	"strings"
-
 	"github.com/jinzhu/copier"
 )
 
 type CreateFeesDTO struct {
 	DepartmentID  uint    `json:"department_id"`
 	Semester      uint    `json:"semester"`
-	StudentID     uint    `json:"student_id,omitempty"`
 	CollegeAmount float64 `json:"college_amount"`
 	HostelAmount  float64 `json:"hostel_amount"`
 	Amount        float64 `json:"amount"`

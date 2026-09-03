@@ -7,9 +7,10 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/cors"
 )
 
+
+// NewApp initializes fiber.App and registers all route handlers
 func NewApp(
 	userController *controller.UserController,
 	instituteController *controller.InstituteController,
@@ -18,7 +19,6 @@ func NewApp(
 	studentController *controller.StudentController,
 	feesController *controller.FeesController,
 	roleController *controller.RoleController,
-	menuController *controller.MenuController,
 ) *fiber.App {
 	app := fiber.New()
 	RegisterRoutes(
@@ -30,7 +30,6 @@ func NewApp(
 		studentController,
 		feesController,
 		roleController,
-		menuController,
 	)
 	return app
 }
@@ -44,14 +43,9 @@ func RegisterRoutes(
 	studentController *controller.StudentController,
 	feesController *controller.FeesController,
 	roleController *controller.RoleController,
-	menuController *controller.MenuController,
 ) {
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:4200"},
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
-	}))
 
+	
 	app.Use(middleware.RequestResponseLogger())
 
 	app.Post("/signup/:role", userController.SignUpController)
@@ -66,7 +60,7 @@ func RegisterRoutes(
 
 	protected := app.Group("", middleware.AuthRequired())
 
-	protected.Get("/menus", menuController.GetMenus)
+	
 	protected.Get("/profile", userController.GetProfile)
 	protected.Post("/users/assign-role", middleware.RequirePermission(constants.PermissionAssignRoles), userController.AssignRoleController)
 
@@ -127,7 +121,6 @@ func RegisterRoutes(
 	StudentRoute.Post("", middleware.RequirePermission(constants.PermissionCreateStudents), studentController.CreateStudentControllers)
 	StudentRoute.Get("", middleware.RequirePermission(constants.PermissionViewStudents), studentController.FetchAllStudentsPaginatedControllers)
 	StudentRoute.Get("/loginstudents", middleware.RequirePermission(constants.PermissionViewStudents), studentController.GetLoggedInStudentController)
-	StudentRoute.Get("/active", middleware.RequirePermission(constants.PermissionViewStudents), studentController.GetActiveStudentController)
 	StudentRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewStudentsID), studentController.GetStudentByIDControllers)
 	StudentRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateStudents), studentController.UpdateStudentController)
 	StudentRoute.Patch("/:id", studentController.UpdateStudentSemesterController)
@@ -135,7 +128,6 @@ func RegisterRoutes(
 
 	FeesRoute := protected.Group("/fees")
 	FeesRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFees), feesController.CreateFeesController)
-	FeesRoute.Get("/department/:departmentId/semester/:semester", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetDepartmentFeeBySemesterController)
 	FeesRoute.Get("/department/:departmentId", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetDepartmentFeesController)
 	FeesRoute.Get("", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetAllFeesController)
 	FeesRoute.Get("/all", middleware.RequirePermission(constants.PermissionViewFees), feesController.FetchAllFeesController)
