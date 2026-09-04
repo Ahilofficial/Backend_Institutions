@@ -21,23 +21,6 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 }
 
 // IsSuperAdmin checks if a user has the Super Admin role assigned
-func (r *UserRepository) IsSuperAdmin(userID uint) (bool, error) {
-	var isSuper bool
-	query := `
-		SELECT EXISTS (
-			SELECT 1
-			FROM user_roles ur
-			JOIN roles r ON r.id = ur.role_id
-			WHERE ur.user_id = ? 
-			  AND LOWER(r.name) IN ('super admin', 'super_admin', 'superadmin')
-		)
-	`
-	err := r.db.Raw(query, userID).Scan(&isSuper).Error
-	if err != nil {
-		return false, err
-	}
-	return isSuper, nil
-}
 
 // UpdateFacultyID sets faculty_id on user record
 func (r *UserRepository) UpdateFacultyID(userID uint, facultyID uint) error {
@@ -62,21 +45,7 @@ func (r *UserRepository) GetUserByID(userID uint) (*model.User, error) {
 	return &user, nil
 }
 
-// HasAnyRoleAssigned verifies whether a user has at least one role assigned
-func (r *UserRepository) HasAnyRoleAssigned(userID uint) (bool, error) {
-	isSuper, err := r.IsSuperAdmin(userID)
-	if err == nil && isSuper {
-		return true, nil
-	}
 
-	var count int64
-	err = r.db.Table("user_roles").Where("user_id = ?", userID).Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
 
 // AssignRoleByName assigns a role to a user by role name, creating the role if it doesn't exist
 func (r *UserRepository) AssignRoleByName(userID uint, roleName string) error {
@@ -218,11 +187,7 @@ func (r *UserRepository) CanManageStudentFees(currentUserID uint, studentID uint
 		return assignedInstID > 0 && assignedInstID == studentInstID, nil
 	}
 
-	// 5. Super admin access check
-	isSuper, err := r.IsSuperAdmin(currentUserID)
-	if err == nil && isSuper {
-		return true, nil
-	}
+	
 
 	// 6. Assigned faculty check
 	if currentUser.FacultyID > 0 && currentUser.FacultyID == student.FacultyID {
@@ -233,54 +198,7 @@ func (r *UserRepository) CanManageStudentFees(currentUserID uint, studentID uint
 }
 
 // HasInstitutionAccess checks if a user has access rights to a specific institution
-func (r *UserRepository) HasInstitutionAccess(
-	userID uint,
-	institutionID uint,
-) (bool, error) {
-	if userID == 0 || institutionID == 0 {
-		return false, errors.New("invalid user or institution ID")
-	}
 
-	// 1. Institution admin check
-	isInstAdmin, assignedInstID, _ := r.IsInstitutionAdmin(userID)
-	if isInstAdmin {
-		return assignedInstID > 0 && assignedInstID == institutionID, nil
-	}
-
-	// 2. Super admin check
-	isSuper, err := r.IsSuperAdmin(userID)
-	if err == nil && isSuper {
-		return true, nil
-	}
-
-	// 3. User profile check
-	var user model.User
-	if err := r.db.Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error; err != nil {
-		return false, err
-	}
-
-	// 4. Check faculty institution
-	if user.FacultyID > 0 {
-		var faculty model.Faculty
-		if err := r.db.Preload("Department").Where("id = ? AND deleted_at IS NULL", user.FacultyID).First(&faculty).Error; err == nil {
-			if faculty.Department.InstitutionID == institutionID {
-				return true, nil
-			}
-		}
-	}
-
-	// 5. Check student institution
-	if user.StudentID > 0 {
-		var student model.Student
-		if err := r.db.Preload("Faculty.Department").Where("id = ? AND deleted_at IS NULL", user.StudentID).First(&student).Error; err == nil {
-			if student.Faculty.Department.InstitutionID == institutionID {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
 
 // UpdateStudentID sets student_id on user record
 func (r *UserRepository) UpdateStudentID(userID uint, studentID uint) error {
@@ -355,45 +273,47 @@ func (r *UserRepository) UpdateUser(user *model.User) error {
 	).Error
 }
 
-
 // CreateUser inserts a new user record after verifying uniqueness of email and phone
 func (r *UserRepository) CreateUser(user *model.User) error {
 
 	//phone no exists
-	
+
 	var phonecount uint
 
-	err:=r.db.Raw(`select count(*) from users where phone=?`,user.Phone).Scan(&phonecount).Error
+	err := r.db.Raw(`select count(*) from users where phone=?`, user.Phone).Scan(&phonecount).Error
 	if err != nil {
 		return err
 	}
-	if phonecount>0{
+	if phonecount > 0 {
 		return errors.New("Phone number  already there")
 	}
 	var emailcount uint
-	email_err:=r.db.Raw(`select count(*) from users where email=?`,user.Email).Scan(&emailcount).Error
+	email_err := r.db.Raw(`select count(*) from users where email=?`, user.Email).Scan(&emailcount).Error
 	if email_err != nil {
 		return email_err
 	}
-	if emailcount>0{
+	if emailcount > 0 {
 		return errors.New("Email  already there")
 	}
-	 now := time.Now()
-	 var tokenVal any = user.VerificationToken
-	 var expiresAt any = user.TokenExpiresAt
+	now := time.Now()
+	var tokenVal any = user.VerificationToken
+	var expiresAt any = user.TokenExpiresAt
+
+	result, _ := r.db.DB()
 
 	query := `
 		INSERT INTO users (name, email, phone, password, is_active, is_verified, verification_token, token_expires_at, created_at, updated_at) 
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	result:=r.db.Exec(query, user.Name, user.Email, user.Phone, user.Password, user.IsActive, user.IsVerified, tokenVal, expiresAt, now, now,)
-	if result.Error!=nil{
-		return result.Error
+	insert_records, err := result.Exec(query, user.Name, user.Email, user.Phone, user.Password, user.IsActive, user.IsVerified, tokenVal, expiresAt, now, now)
+	if err != nil {
+		return err
 	}
 
-	if result.RowsAffected == 0 {
-	return errors.New("user was not created")
-}
-
+	lastInsertedID, err := insert_records.LastInsertId()
+	if err != nil {
+		return err
+	}
+	user.ID = uint(lastInsertedID)
 	return nil
 
 }
@@ -496,7 +416,6 @@ func (s *UserRepository) ForgotPasswordRepo(dto dto.ForgotPasswordDTO) (model.Us
 	return user, nil
 }
 
-
 func (r *UserRepository) AssignRole(
 	userID uint,
 	roleID uint,
@@ -569,24 +488,20 @@ func (r *UserRepository) UpdatePassword(id uint, password string) error {
 
 // Logout deactivates user session tokens
 func (r *UserRepository) Logout(dto *dto.LogoutDTO) error {
-	if dto.Token != "" {
-		_ = r.db.Exec(`
-			UPDATE sessions
-			SET access_token = NULL, refresh_token = NULL, is_active = FALSE
-			WHERE refresh_token = ?
-		`, dto.Token).Error
+	if dto.Token == "" {
+		return errors.New("refresh token is required")
 	}
 
-	if dto.UserID > 0 {
-		_ = r.db.Exec(`
-			UPDATE sessions
-			SET access_token = NULL, refresh_token = NULL, is_active = FALSE
-			WHERE user_id = ? AND is_active = TRUE
-		`, dto.UserID).Error
-	}
-
-	return nil
+	return r.db.Exec(`
+		UPDATE sessions
+		SET access_token = NULL,
+		    refresh_token = NULL,
+		    is_active = FALSE
+		WHERE refresh_token = ?
+	`, dto.Token).Error
 }
+
+
 
 // FindByID retrieves a user record by primary key ID
 func (r *UserRepository) FindByID(userID uint) (model.User, error) {
@@ -611,11 +526,9 @@ func (r *UserRepository) FindByID(userID uint) (model.User, error) {
 	return user, nil
 }
 
-
-
 // FetchUserRoles retrieves all roles assigned to a user
-func (r *UserRepository) FetchUserRoles(userID uint) ([]model.Role, error) {
-	var roles []model.Role
+func (r *UserRepository) FetchUserRoles(userID uint) (model.Role, error) {
+	var roles model.Role
 
 	query := `
 		SELECT r.id, r.name
@@ -627,11 +540,11 @@ func (r *UserRepository) FetchUserRoles(userID uint) ([]model.Role, error) {
 
 	result := r.db.Raw(query, userID).Scan(&roles)
 	if result.Error != nil {
-		return nil, result.Error
+		return model.Role{}, result.Error
 	}
 
 	if result.RowsAffected == 0 {
-		return nil, errors.New("no roles assigned to user")
+		return model.Role{}, errors.New("no roles assigned to user")
 	}
 
 	return roles, nil
@@ -672,78 +585,92 @@ func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
 	if userID == 0 {
 		return 0, nil
 	}
-	var user model.User
-	err := r.db.Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error
+
+	var facultyID uint
+
+	err := r.db.Raw(`
+		SELECT faculty_id
+		FROM users
+		WHERE id = ?
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, userID).Scan(&facultyID).Error
+
 	if err != nil {
 		return 0, err
 	}
-	if user.FacultyID == 0 {
-		var faculty model.Faculty
-		if err := r.db.Where("user_id = ? AND deleted_at IS NULL", userID).First(&faculty).Error; err == nil && faculty.ID > 0 {
-			user.FacultyID = faculty.ID
-			_ = r.UpdateUserFacultyID(userID, faculty.ID)
-		}
-	}
-	return user.FacultyID, nil
+
+	return facultyID, nil
 }
+
 
 // GetUserStudentID resolves student_id linked to user
 func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
 	if userID == 0 {
 		return 0, nil
 	}
-	var user model.User
-	err := r.db.Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error
+
+	var studentID uint
+
+	err := r.db.Raw(`
+		SELECT student_id
+		FROM users
+		WHERE id = ?
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, userID).Scan(&studentID).Error
+
 	if err != nil {
 		return 0, err
 	}
-	if user.StudentID == 0 {
-		var student model.Student
-		if err := r.db.Where("user_id = ? AND deleted_at IS NULL", userID).First(&student).Error; err == nil && student.ID > 0 {
-			user.StudentID = student.ID
-			_ = r.UpdateUserStudentID(userID, student.ID)
-		}
-	}
-	return user.StudentID, nil
+
+	return studentID, nil
 }
+
 
 // GetInstitutionAdminID gets institution_id if user is institution admin
 func (r *UserRepository) GetInstitutionAdminID(userID uint) (uint, error) {
 	var institutionID uint
-	err := r.db.Table("institution_admins").Where("user_id = ?", userID).Select("institution_id").Scan(&institutionID).Error
+
+	err := r.db.Raw(`
+		SELECT institution_id
+		FROM institution_admins
+		WHERE user_id = ?
+		LIMIT 1
+	`, userID).Scan(&institutionID).Error
+
 	if err != nil {
 		return 0, err
 	}
+
 	return institutionID, nil
 }
 
 // IsSuperAdminByRoleID checks if role ID corresponds to Super Admin
-func (r *UserRepository) IsSuperAdminByRoleID(roleID uint) (bool, error) {
-	var count int64
-	err := r.db.
-		Table("roles").
-		Where("id = ? AND LOWER(name) IN ('super admin', 'super_admin', 'superadmin')", roleID).
-		Count(&count).Error
 
-	if err != nil {
-		return false, err
-	}
-
-	return count > 0, nil
-}
 
 // GetUserRoleID retrieves the first role_id assigned to a user
 func (r *UserRepository) GetUserRoleID(userID uint) (uint, error) {
 	var roleID uint
-	err := r.db.Table("user_roles").Where("user_id = ?", userID).Select("role_id").Scan(&roleID).Error
+
+	err := r.db.Raw(`
+		SELECT role_id
+		FROM user_roles
+		WHERE user_id = ?
+		LIMIT 1
+	`, userID).Scan(&roleID).Error
+
 	if err != nil {
 		return 0, err
 	}
+
 	if roleID == 0 {
 		return 0, errors.New("role not assigned to user")
 	}
+
 	return roleID, nil
 }
+
 
 // CheckUserExistingProfileFaculty checks whether user already has a Student or Faculty profile registered
 func (r *UserRepository) CheckUserExistingProfileFaculty(userID uint) (bool, string) {
@@ -779,10 +706,7 @@ func (r *UserRepository) UpdateUserStudentID(userID uint, studentID uint) error 
 	if userID == 0 {
 		return nil
 	}
-	isSuper, _ := r.IsSuperAdmin(userID)
-	if isSuper {
-		return nil
-	}
+	
 	res := r.db.Exec("UPDATE users SET student_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", studentID, userID)
 	return res.Error
 }
@@ -792,10 +716,7 @@ func (r *UserRepository) UpdateUserFacultyID(userID uint, facultyID uint) error 
 	if userID == 0 {
 		return nil
 	}
-	isSuper, _ := r.IsSuperAdmin(userID)
-	if isSuper {
-		return nil
-	}
+	
 	res := r.db.Exec("UPDATE users SET faculty_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", facultyID, userID)
 	return res.Error
 }

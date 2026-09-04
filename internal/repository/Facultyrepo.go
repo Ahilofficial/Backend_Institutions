@@ -30,7 +30,7 @@ func (r *FacultyRepository) CreateFaculty(faculty *model.Faculty) error {
 
 	now := time.Now()
 
-	var userIDVal interface{} = nil
+	var userIDVal any = nil
 	if faculty.UserID > 0 {
 		userIDVal = faculty.UserID
 	}
@@ -161,6 +161,38 @@ func (r *FacultyRepository) FetchFacultyPaginated(page, limit int) ([]model.Facu
 	return facs, total, nil
 }
 
+// FetchFacultyPaginatedByInstitution fetches paginated faculty records for a specific institution
+func (r *FacultyRepository) FetchFacultyPaginatedByInstitution(institutionID uint, page, limit int) ([]model.Faculty, int64, error) {
+	var (
+		facs  []model.Faculty
+		total int64
+	)
+
+	query := r.db.Model(&model.Faculty{}).
+		Joins("JOIN departments ON departments.id = faculties.department_id").
+		Where("departments.institution_id = ? AND faculties.deleted_at IS NULL", institutionID)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+
+	err := query.
+		Preload("Students").
+		Preload("Students.Fees").
+		Preload("Students.Fees.Payments").
+		Limit(limit).
+		Offset(offset).
+		Find(&facs).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return facs, total, nil
+}
+
 // FetchFacultyById retrieves a single faculty record by primary key ID with student relations
 func (r *FacultyRepository) FetchFacultyById(id uint) (model.Faculty, error) {
 	var fac model.Faculty
@@ -248,24 +280,40 @@ func (r *FacultyRepository) GetInstitutionByFacultyID(facultyID uint) (uint, err
 // FetchByUserID retrieves faculty record matching a given user_id
 func (r *FacultyRepository) FetchByUserID(userID uint) (model.Faculty, error) {
 	var fac model.Faculty
-	err := r.db.Where("user_id = ? AND deleted_at IS NULL", userID).First(&fac).Error
+
+	err := r.db.Raw(`
+		SELECT *
+		FROM faculties
+		WHERE user_id = ?
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, userID).Scan(&fac).Error
+
 	return fac, err
 }
 
 // ExistsByUserID checks whether a faculty profile already exists for a user_id
 func (r *FacultyRepository) ExistsByUserID(userID uint) (bool, error) {
-	var count int64
-	err := r.db.Model(&model.Faculty{}).Where("user_id = ? AND deleted_at IS NULL", userID).Count(&count).Error
+	var exists bool
+
+	err := r.db.Raw(`
+		SELECT EXISTS (
+			SELECT 1
+			FROM faculties
+			WHERE user_id = ?
+			  AND deleted_at IS NULL
+		)
+	`, userID).Scan(&exists).Error
+
 	if err != nil {
 		return false, err
 	}
-	return count > 0, nil
+
+	return exists, nil
 }
 
 // GetPaidStudentsForFaculty fetches all students assigned to a faculty who have fully settled fees
-func (r *FacultyRepository) GetPaidStudentsForFaculty(
-	facultyID uint,
-) ([]model.Student, error) {
+func (r *FacultyRepository) GetPaidStudentsForFaculty(facultyID uint,) ([]model.Student, error) {
 	var students []model.Student
 	err := r.db.
 		Preload("Fees").
@@ -279,9 +327,7 @@ func (r *FacultyRepository) GetPaidStudentsForFaculty(
 }
 
 // GetNonPaidStudentsForFaculty fetches all students assigned to a faculty who have pending fee balances
-func (r *FacultyRepository) GetNonPaidStudentsForFaculty(
-	facultyID uint,
-) ([]model.Student, error) {
+func (r *FacultyRepository) GetNonPaidStudentsForFaculty(facultyID uint,) ([]model.Student, error) {
 	var students []model.Student
 	err := r.db.
 		Preload("Fees").

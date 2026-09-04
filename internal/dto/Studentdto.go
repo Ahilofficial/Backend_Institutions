@@ -41,8 +41,14 @@ func (dto *CreateStudentDTO) Validate() error {
 }
 
 type UpdateStudentDTO struct {
-	Name   string `json:"name"`
-	Gender string `json:"gender"`
+	Name      string `json:"name"`
+	Gender    string `json:"gender"`
+	Semester  uint   `json:"semester"`
+
+	
+}
+type UpdateSemesterDTO struct{
+	Semester  uint   `json:"semester"`
 }
 
 func (dto *UpdateStudentDTO) Validate() error {
@@ -62,22 +68,22 @@ func (dto *UpdateStudentDTO) Sanitize() {
 	dto.Gender = strings.TrimSpace(strings.ToLower(dto.Gender))
 }
 
-type UpdateStudentSemesterDTO struct {
-	Semester    uint  `json:"semester"`
-	Hosteller   *bool `json:"hosteller,omitempty"`
-	Scholarship *bool `json:"scholarship,omitempty"`
-	MQ          *bool `json:"mq,omitempty"`
-}
+// type UpdateStudentSemesterDTO struct {
+// 	Semester    uint  `json:"semester"`
+// 	Hosteller   *bool `json:"hosteller,omitempty"`
+// 	Scholarship *bool `json:"scholarship,omitempty"`
+// 	MQ          *bool `json:"mq,omitempty"`
+// }
 
-func (dto *UpdateStudentSemesterDTO) Validate() error {
-	if dto.Semester == 0 {
-		return errors.New("semester is required and must be greater than 0")
-	}
-	if dto.MQ != nil && dto.Scholarship != nil && *dto.MQ && *dto.Scholarship {
-		return errors.New("management quota student cannot have scholarship")
-	}
-	return nil
-}
+// func (dto *UpdateStudentSemesterDTO) Validate() error {
+// 	if dto.Semester == 0 {
+// 		return errors.New("semester is required and must be greater than 0")
+// 	}
+// 	if dto.MQ != nil && dto.Scholarship != nil && *dto.MQ && *dto.Scholarship {
+// 		return errors.New("management quota student cannot have scholarship")
+// 	}
+// 	return nil
+// }
 
 type StudentFacultyDTO struct {
 	ID           uint   `json:"id"`

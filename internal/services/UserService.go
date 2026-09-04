@@ -94,6 +94,7 @@ func (s *UserService) SignUp(dto *dto.SignUpDTO) (model.User, error) {
 	return user, nil
 }
 
+
 // SignUpWithRole registers a user and automatically assigns a specified role
 func (s *UserService) SignUpWithRole(
 	dto *dto.SignUpDTO,
@@ -183,6 +184,8 @@ func (s *UserService) SignUpWithRole(
 		); 
 	}(user.Email, subject, body)
 
+	user.Roles = []model.Role{role}
+
 	return user, nil
 }
 
@@ -233,13 +236,7 @@ func (s *UserService) SignIn(dto *dto.SignInDTO, c fiber.Ctx) (string, string, u
 	// 5. Resolve user's primary assigned role
 	
 	rolesList, _ := s.userrepo.FetchUserRoles(user.ID)
-	
-
-if len(rolesList) == 0 {
-	return "", "", 0, "", "", errors.New("user role not found")
-}
-
-primaryRole := rolesList[0].Name
+	primaryRole := rolesList.Name
 	
 	
 	
@@ -435,7 +432,7 @@ func (s *UserService) ResendMail(email string) error {
 
 	// 4. Update token and expiry on user record
 	user.VerificationToken = token
-	user.TokenExpiresAt = time.Now().Add(24 * time.Hour)
+	user.TokenExpiresAt = time.Now().Add(30 * time.Minute)
 	err = s.userrepo.UpdateUser(&user)
 	if err != nil {
 		return err
@@ -480,8 +477,8 @@ func (s *UserService) GetProfileByID(id uint) (model.User, error) {
 	}
 
 	// 4. Fetch assigned roles
-	roles, _ := s.userrepo.FetchUserRoles(id)
-	user.Roles = roles
+	// roles, _ := s.userrepo.FetchUserRoles(id)
+	// user.Roles=roles
 
 	return user, nil
 }

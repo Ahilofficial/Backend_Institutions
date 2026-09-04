@@ -108,7 +108,7 @@ func RegisterRoutes(
 	DepartmentRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteDepartments), departmentController.DeleteDepartmentController)
 
 	FacultyRoute := protected.Group("/faculties")
-	FacultyRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFaculties), facultyController.CreateFacultyController)
+	FacultyRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFaculties), facultyController.CreateFacultyController)  //1
 	FacultyRoute.Get("", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.GetAllFacultiesController)
 	FacultyRoute.Get("/loginfaculty/students", middleware.RequirePermission(constants.PermissionFacultyViewStudents), facultyController.GetLoggedInFacultyStudentsController)
 	FacultyRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewIDFaculties), facultyController.GetFacultyByIDController)
@@ -120,10 +120,10 @@ func RegisterRoutes(
 	StudentRoute := protected.Group("/students")
 	StudentRoute.Post("", middleware.RequirePermission(constants.PermissionCreateStudents), studentController.CreateStudentControllers)
 	StudentRoute.Get("", middleware.RequirePermission(constants.PermissionViewStudents), studentController.FetchAllStudentsPaginatedControllers)
-	StudentRoute.Get("/loginstudents", middleware.RequirePermission(constants.PermissionViewStudents), studentController.GetLoggedInStudentController)
+
 	StudentRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewStudentsID), studentController.GetStudentByIDControllers)
 	StudentRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateStudents), studentController.UpdateStudentController)
-	StudentRoute.Patch("/:id", studentController.UpdateStudentSemesterController)
+	StudentRoute.Patch("/:id", middleware.RequirePermission(constants.PermissionUpdateStudents),studentController.UpdateStudentSemesterController)
 	StudentRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteStudents), studentController.DeleteStudentControllers)
 
 	FeesRoute := protected.Group("/fees")

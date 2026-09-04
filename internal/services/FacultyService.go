@@ -36,8 +36,8 @@ func (s *FacultyService) GetNonPaidStudentsForFacultyService(
 ) ([]model.Student, error) {
 	// 1. Resolve faculty ID for the logged-in user
 	facultyID, err := s.GetFacultyIDForUserService(userID)
-	if err != nil {
-		return nil, err
+	if err != nil || facultyID == 0 {
+		return nil, errors.New("faculty profile not found for logged in user")
 	}
 
 	// 2. Fetch non-paid/pending students assigned to this faculty
@@ -62,8 +62,8 @@ func (s *FacultyService) GetPaidStudentsForFacultyService(
 ) ([]model.Student, error) {
 	// 1. Resolve faculty ID for the logged-in user
 	facultyID, err := s.GetFacultyIDForUserService(userID)
-	if err != nil {
-		return nil, err
+	if err != nil || facultyID == 0 {
+		return nil, errors.New("faculty profile not found for logged in user")
 	}
 
 	// 2. Fetch fully paid students assigned to this faculty
@@ -104,10 +104,11 @@ func (s *FacultyService) CreateFacultyService(
 
 	// 5. Check institution access authorization
 	isInstAdmin := s.instituteRepo.IsInstAdminRepo(userID)
-	if !isInstAdmin && departmentInstitutionID != loggedInUserInstitutionID {
-		return model.Faculty{}, errors.New(
-			"access denied: you can only create a faculty profile for your own institution",
-		)
+	
+	if isInstAdmin{
+		if loggedInUserInstitutionID!=departmentInstitutionID{
+			return model.Faculty{},errors.New("you can create faculty only for your institution")
+		}
 	}
 
 	// 6. Assemble faculty model
@@ -128,28 +129,78 @@ func (s *FacultyService) CreateFacultyService(
 	return faculty, nil
 }
 
+// CheckFacultyAccess verifies whether the authenticated user has rights to view or update the target faculty
+func (s *FacultyService) CheckFacultyAccess(userID uint, targetFacultyID uint) error {
+	// 1. If user is a faculty member, they can only view/update their own profile
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		if userFacultyID != targetFacultyID {
+			return errors.New("access denied: you can only access your own faculty profile")
+		}
+		return nil
+	}
+
+	// 2. If user is an institution admin, verify the target faculty belongs to their institution
+	if s.instituteRepo.IsInstAdminRepo(userID) {
+		adminInstID := s.instituteRepo.GetInstitutionIDForUserRepo(userID)
+		facultyInstID := s.facultyRepo.GetInstitutionIDForUserRepo(targetFacultyID)
+		if adminInstID == 0 || adminInstID != facultyInstID {
+			return errors.New("Cant able to access other institution")
+		}
+		return nil
+	}
+
+	return nil
+}
+
 // GetFacultyService fetches all active faculty records
 func (s *FacultyService) GetFacultyService() ([]model.Faculty, error) {
 	return s.facultyRepo.FetchFaculty()
 }
 
-// GetFacultyServicePaginated fetches faculty records with pagination support
+// GetFacultyServicePaginated fetches faculty records with pagination support scoped to user role
 func (s *FacultyService) GetFacultyServicePaginated(
+	userID uint,
 	page int,
 	limit int,
 ) ([]model.Faculty, int64, error) {
+	// 1. If user is a faculty member, return only their own profile
+	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	if userFacultyID > 0 {
+		fac, err := s.facultyRepo.FetchFacultyById(userFacultyID)
+		if err != nil {
+			return nil, 0, err
+		}
+		return []model.Faculty{fac}, 1, nil
+	}
+
+	// 2. If user is an institution admin, return only faculties belonging to their institution
+	if s.instituteRepo.IsInstAdminRepo(userID) {
+		adminInstID := s.instituteRepo.GetInstitutionIDForUserRepo(userID)
+		if adminInstID > 0 {
+			return s.facultyRepo.FetchFacultyPaginatedByInstitution(adminInstID, page, limit)
+		}
+		return []model.Faculty{}, 0, nil
+	}
+
+	// 3. Otherwise return all paginated faculties
 	return s.facultyRepo.FetchFacultyPaginated(
 		page,
 		limit,
 	)
 }
 
-// GetFacultyServiceById fetches a single faculty record by ID
+// GetFacultyServiceById fetches a single faculty record by ID after verifying access
 func (s *FacultyService) GetFacultyServiceById(
 	userID uint,
 	id uint,
 ) (*model.Faculty, error) {
-	// 1. Fetch faculty from repository
+	// 1. Verify access permissions
+	if err := s.CheckFacultyAccess(userID, id); err != nil {
+		return nil, err
+	}
+
+	// 2. Fetch faculty from repository
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return nil, err
@@ -198,24 +249,17 @@ func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Studen
 	return s.facultyRepo.FetchStudentsByFacultyID(facultyID)
 }
 
-// DeleteFacultyService handles soft deletion of a faculty record
+// DeleteFacultyService handles soft deletion of a faculty record after verifying access
 func (s *FacultyService) DeleteFacultyService(
 	userID uint,
 	id uint,
 ) error {
-	// 1. Fetch faculty record to verify existence
-	faculty, err := s.facultyRepo.FetchFacultyById(id)
-	if err != nil {
+	// 1. Verify access authorization
+	if err := s.CheckFacultyAccess(userID, id); err != nil {
 		return err
 	}
 
-	// 2. Check if logged-in user is attempting to delete their own faculty profile
-	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	if faculty.ID != userFacultyID {
-		return errors.New("you cant able to delete other faculty")
-	}
-
-	// 3. Delete faculty record
+	// 2. Delete faculty record in repository
 	return s.facultyRepo.DeleteFaculty(id)
 }
 
@@ -225,29 +269,18 @@ func (s *FacultyService) UpdateFacultyService(
 	id uint,
 	req *dto.UpdateFacultyDTO,
 ) error {
-	// 1. Fetch existing faculty record
+	// 1. Verify access authorization
+	if err := s.CheckFacultyAccess(userID, id); err != nil {
+		return err
+	}
+
+	// 2. Fetch existing faculty record
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
 	}
 
-	// 2. Verify faculty ownership
-	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
-	if userFacultyID != id {
-		return errors.New("access denied: you can only update your own faculty profile")
-	}
-
-	// 3. Verify institution match
-	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
-	if err != nil {
-		return err
-	}
-	logginedUserInstitutionID := s.facultyRepo.LoginnedUserInstitutionIDRepo(userID)
-	if facultyInstitutionID != logginedUserInstitutionID {
-		return errors.New("access denied: you can only update your own faculty profile")
-	}
-
-	// 4. Update faculty profile fields
+	// 3. Update faculty profile fields
 	faculty.Name = req.Name
 	faculty.Gender = req.Gender
 	return s.facultyRepo.UpdateFacultyById(&faculty)

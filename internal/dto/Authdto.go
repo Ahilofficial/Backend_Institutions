@@ -36,7 +36,7 @@ type SignInDTO struct {
 
 type LogoutDTO struct {
 	UserID uint   `json:"user_id"`
-	Token  string `json:"refresh_token"`
+	Token  string `json:"access_token"`
 }
 
 type ResendMailSignUp struct {

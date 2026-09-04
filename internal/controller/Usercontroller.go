@@ -223,7 +223,10 @@ func (cl *UserController) ResetPassword(c fiber.Ctx) error {
 func (cl *UserController) Logout(c fiber.Ctx) error {
 	// 1. Bind logout parameters
 	var body dto.LogoutDTO
-	_ = c.Bind().Body(&body)
+	err:= c.Bind().Body(&body)
+	if err != nil {
+		return err
+	}
 
 	// 2. Fallback to authenticated user ID from context
 	if body.UserID == 0 {

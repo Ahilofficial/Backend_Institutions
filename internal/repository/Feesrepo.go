@@ -419,8 +419,8 @@ func (r *FeesRepository) RecalculateFeeTotals(feeID uint, latestPaymentMode stri
 }
 
 // FetchFeesByStudentID retrieves all fees for a student ordered by semester
-func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, error) {
-	var fees []model.Fees
+func (r *FeesRepository) FetchFeesByStudentID(studentID uint) (model.Fees, error) {
+	var fees model.Fees
 
 	err := r.db.
 		Preload("Payments").
@@ -430,7 +430,7 @@ func (r *FeesRepository) FetchFeesByStudentID(studentID uint) ([]model.Fees, err
 		Find(&fees).Error
 
 	if err != nil {
-		return nil, err
+		return model.Fees{}, err
 	}
 
 	return fees, nil

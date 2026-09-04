@@ -7,6 +7,7 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -120,20 +121,16 @@ func (cl *InstituteController) GetInstituteByIDController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "Invalid institute ID")
 	}
 
-	// 3. Verify institution admin access boundaries
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_user_institution_id != uint(id)) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 4. Fetch institution record from service
+	// 3. Fetch institution record from service (service validates access boundaries)
 	institute, err := cl.instituteService.GetInstituteServiceById(userID, uint(id))
 	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
+		
+			return helper.Error(c, 403, err.Error())
+		}
+	
+	
 
-	// 5. Return institution response
+	// 4. Return institution response
 	return helper.Success(
 		c,
 		"Institute fetched successfully",
@@ -156,14 +153,7 @@ func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid id")
 	}
 
-	// 3. Check institution admin access authorization
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_user_institution_id != uint(id)) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 4. Bind and validate request body
+	// 3. Bind and validate request body
 	var body dto.UpdateInstitutionDTO
 	body.Sanitize()
 
@@ -175,22 +165,25 @@ func (cl *InstituteController) UpdateInstituteController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 5. Update institution in service
+	// 4. Update institution via service (service validates access boundaries)
 	if err := cl.instituteService.UpdateInstitutionService(
 		userID,
 		uint(id),
 		&body,
 	); err != nil {
-		return helper.Error(c, 403, err.Error())
+		if strings.Contains(strings.ToLower(err.Error()), "access other institution") {
+			return helper.Error(c, 403, err.Error())
+		}
+		return helper.Error(c, 400, err.Error())
 	}
 
-	// 6. Fetch updated institution details
+	// 5. Fetch updated institution details
 	updated, err := cl.instituteService.GetInstituteServiceById(userID, uint(id))
 	if err != nil {
-		return helper.Error(c, 403, err.Error())
+		return helper.Error(c, 400, err.Error())
 	}
 
-	// 7. Return success response with updated institution DTO
+	// 6. Return success response with updated institution DTO
 	return helper.Success(
 		c,
 		"Institution updated successfully",
@@ -213,19 +206,15 @@ func (cl *InstituteController) DeleteInstituteController(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid institute id")
 	}
 
-	// 3. Check institution admin access authorization
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_user_institution_id := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_user_institution_id != uint(id)) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 4. Delete institution via service
-	if err := cl.instituteService.DeleteInstitutionService(uint(id)); err != nil {
+	// 3. Delete institution via service (service validates access boundaries)
+	if err := cl.instituteService.DeleteInstitutionService(userID, uint(id)); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "access other institution") {
+			return helper.Error(c, 403, err.Error())
+		}
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 5. Return success response
+	// 4. Return success response
 	return helper.Success(
 		c,
 		"Institution deleted successfully",

@@ -101,6 +101,37 @@ func (r *DepartmentRepository) FetchDepartmentPaginated(page, limit int) ([]mode
 	return depts, total, nil
 }
 
+// FetchDepartmentPaginatedByInstitution fetches paginated departments for a specific institution
+func (r *DepartmentRepository) FetchDepartmentPaginatedByInstitution(institutionID uint, page, limit int) ([]model.Department, int64, error) {
+	var (
+		depts []model.Department
+		total int64
+	)
+
+	query := r.db.Model(&model.Department{}).Where("institution_id = ? AND deleted_at IS NULL", institutionID)
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * limit
+
+	err := query.
+		Preload("Faculties").
+		Preload("Faculties.Students").
+		Preload("Faculties.Students.Fees").
+		Preload("Faculties.Students.Fees.Payments").
+		Limit(limit).
+		Offset(offset).
+		Find(&depts).Error
+
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return depts, total, nil
+}
+
 // FetchDepartmentById retrieves department by ID with associated relations
 func (r *DepartmentRepository) FetchDepartmentById(id uint) (model.Department, error) {
 	var dept model.Department

@@ -29,7 +29,7 @@ func InitializeApp() (*fiber.App, error) {
 	instituteService := services.NewInstituteService(institutionRepository, userRepository)
 	instituteController := controller.NewInstituteController(instituteService)
 	departmentRepository := repository.NewDepartmentRepository(db)
-	departmentService := services.NewDepartmentService(departmentRepository, userRepository)
+	departmentService := services.NewDepartmentService(departmentRepository, userRepository, institutionRepository)
 	facultyRepository := repository.NewFacultyRepository(db)
 	facultyService := services.NewFacultyService(facultyRepository, departmentRepository, userRepository, institutionRepository)
 	departmentController := controller.NewDepartmentController(departmentService, instituteService, facultyService)

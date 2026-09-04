@@ -6,6 +6,7 @@ import (
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -30,7 +31,7 @@ func NewFacultyController(
 	}
 }
 
-// GetFacultyByIDController handles fetching a single faculty by ID with RBAC and institution checks
+// GetFacultyByIDController handles fetching a single faculty by ID with RBAC and access checks
 func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 	// 1. Extract and validate authenticated user ID from context
 	userID, ok := c.Locals("user_id").(uint)
@@ -46,30 +47,19 @@ func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 	}
 	facultyID := uint(id)
 
-	// 3. Faculty ownership check: faculty can only view own profile
-	userFacultyID, _ := cl.facultyService.GetFacultyIDForUserService(userID)
-	if userFacultyID != facultyID {
-		return helper.Error(c, 403, "Access denied: you can only access your own faculty profile")
-	}
-
-	// 4. Institution admin check: verify target faculty belongs to admin's institution
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_faculty_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 5. Fetch faculty details via service
+	// 3. Fetch faculty details via service (service validates access boundaries)
 	faculty, err := cl.facultyService.GetFacultyServiceById(
 		userID,
 		facultyID,
 	)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") || strings.Contains(strings.ToLower(err.Error()), "access other institution") {
+			return helper.Error(c, 403, err.Error())
+		}
 		return helper.Error(c, 404, err.Error())
 	}
 
-	// 6. Return response DTO
+	// 4. Return response DTO
 	return helper.Success(
 		c,
 		"Faculty fetched successfully",
@@ -117,23 +107,26 @@ func (cl *FacultyController) CreateFacultyController(c fiber.Ctx) error {
 
 // GetAllFacultiesController handles paginated retrieval of all faculty records
 func (cl *FacultyController) GetAllFacultiesController(c fiber.Ctx) error {
-	// 1. Parse pagination query parameters
+	// 1. Extract authenticated user ID
+	userID, _ := c.Locals("user_id").(uint)
+
+	// 2. Parse pagination query parameters
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
 
 	page, _ := strconv.Atoi(pageStr)
 	limit, _ := strconv.Atoi(limitStr)
 
-	// 2. Fetch paginated faculty data from service
-	faculties, total, err := cl.facultyService.GetFacultyServicePaginated(page, limit)
+	// 3. Fetch paginated faculty data from service (scoped to user's permissions)
+	faculties, total, err := cl.facultyService.GetFacultyServicePaginated(userID, page, limit)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
 
-	// 3. Calculate total pages
+	// 4. Calculate total pages
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 
-	// 4. Return formatted response map
+	// 5. Return formatted response map
 	return helper.Success(
 		c,
 		"Faculties fetched successfully",
@@ -201,21 +194,7 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 	}
 	facultyID := uint(id)
 
-	// 3. Verify user ownership
-	userFacultyID, _ := cl.facultyService.GetFacultyIDForUserService(userID)
-	if userFacultyID != facultyID {
-		return helper.Error(c, 403, "Access denied: you can only update your own faculty profile")
-	}
-
-	// 4. Verify institution scoping for institution admin
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_faculty_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 5. Parse and validate update request body
+	// 3. Parse and validate update request body
 	var body dto.UpdateFacultyDTO
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "Invalid request body")
@@ -226,17 +205,20 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 6. Update faculty profile via service
+	// 4. Update faculty profile via service (service validates access boundaries)
 	err = cl.facultyService.UpdateFacultyService(
 		userID,
 		facultyID,
 		&body,
 	)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") || strings.Contains(strings.ToLower(err.Error()), "access other institution") {
+			return helper.Error(c, 403, err.Error())
+		}
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 7. Return success response
+	// 5. Return success response
 	return helper.Success(
 		c,
 		"Faculty updated successfully",
@@ -250,8 +232,7 @@ func (cl *FacultyController) GetPaidStudentsForFacultyController(c fiber.Ctx) er
 	user_id := c.Locals("user_id").(uint)
 
 	// 2. Fetch paid students list via service
-	faculty_id, _ := cl.facultyService.GetFacultyIDForUserService(user_id)
-	paid_students, err := cl.facultyService.GetPaidStudentsForFacultyService(faculty_id)
+	paid_students, err := cl.facultyService.GetPaidStudentsForFacultyService(user_id)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -266,8 +247,7 @@ func (cl *FacultyController) GetNonPaidStudentsForFacultyController(c fiber.Ctx)
 	user_id := c.Locals("user_id").(uint)
 
 	// 2. Fetch pending students list via service
-	faculty_id, _ := cl.facultyService.GetFacultyIDForUserService(user_id)
-	non_paid_students, err := cl.facultyService.GetNonPaidStudentsForFacultyService(faculty_id)
+	non_paid_students, err := cl.facultyService.GetNonPaidStudentsForFacultyService(user_id)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
@@ -292,29 +272,18 @@ func (cl *FacultyController) DeleteFacultyController(c fiber.Ctx) error {
 	}
 	facultyID := uint(id)
 
-	// 3. Prevent faculties from deleting faculty profiles
-	userFacultyID, _ := cl.facultyService.GetFacultyIDForUserService(userID)
-	if userFacultyID > 0 {
-		return helper.Error(c, 403, "Access denied: faculty cannot delete faculty profiles")
-	}
-
-	// 4. Verify institution scoping for institution admin
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_faculty_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 5. Delete faculty record via service
+	// 3. Delete faculty record via service (service validates access boundaries)
 	if err := cl.facultyService.DeleteFacultyService(
 		userID,
 		facultyID,
 	); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "access denied") || strings.Contains(strings.ToLower(err.Error()), "access other institution") {
+			return helper.Error(c, 403, err.Error())
+		}
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 6. Return success confirmation
+	// 4. Return success confirmation
 	return helper.Success(
 		c,
 		"Faculty deleted successfully",

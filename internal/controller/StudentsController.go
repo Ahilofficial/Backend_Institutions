@@ -3,6 +3,7 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
+	
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
@@ -54,6 +55,7 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
+
 
 	// 5. Return success response with created student
 	return helper.Success(
@@ -116,6 +118,7 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	)
 }
 
+
 // UpdateStudentController handles updating student details (name, gender)
 func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 	// 1. Extract authenticated user ID
@@ -172,54 +175,6 @@ func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 }
 
 // UpdateStudentSemesterController handles updating student semester and recalculating fee quotas
-func (cl *StudentController) UpdateStudentSemesterController(c fiber.Ctx) error {
-	// 1. Extract authenticated user ID
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok || userID == 0 {
-		return helper.Error(c, 401, "Invalid user")
-	}
-
-	// 2. Parse path parameter ID
-	idParam := c.Params("id")
-	id, err := strconv.ParseUint(idParam, 10, 32)
-	if err != nil || id == 0 {
-		return helper.Error(c, 400, "Invalid student ID")
-	}
-
-	// 3. Parse and validate semester update body
-	var body dto.UpdateStudentSemesterDTO
-	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "Invalid request body")
-	}
-
-	if err := body.Validate(); err != nil {
-		return helper.Error(c, 400, err.Error())
-	}
-
-	// 4. Check institution admin scope
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 5. Perform update and fee adjustment via service
-	student, fee, err := cl.studentService.UpdateStudentSemesterService(userID, uint(id), &body)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "access denied") {
-			return helper.Error(c, 403, err.Error())
-		}
-		return helper.Error(c, 400, err.Error())
-	}
-
-	// 6. Return updated details and fee snapshot
-	return helper.Success(c, "Student semester details updated successfully", fiber.Map{
-		"student": dto.ToStudentResponseDTO(student),
-		"fee":     dto.ToFeesResponseDTO(fee),
-	})
-}
-
 // DeleteStudentControllers handles soft deletion of a student profile
 func (cl *StudentController) DeleteStudentControllers(c fiber.Ctx) error {
 	// 1. Extract authenticated user ID
@@ -315,18 +270,22 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 		},
 	)
 }
+func(cl *StudentController)UpdateStudentSemesterController(c fiber.Ctx)(error){
+	  userID, _:= c.Locals("user_id").(uint)
+	  sid:=c.Params("id")
+	  id,_:=strconv.ParseUint(sid, 10, 32)
 
-// GetLoggedInStudentController retrieves the student profile of the authenticated user
-func (c *StudentController) GetLoggedInStudentController(ctx fiber.Ctx) error {
-	// 1. Extract authenticated user ID
-	userID, _ := ctx.Locals("user_id").(uint)
-
-	// 2. Fetch logged in student profile from service
-	student, err := c.studentService.GetLoggedInStudentProfile(userID)
-	if err != nil {
-		return helper.Error(ctx, fiber.StatusNotFound, err.Error())
+      var dto dto.UpdateSemesterDTO
+	  err:=c.Bind().Body(&dto)
+	  if err != nil {
+		return err
+	  }
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
+	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
 	}
-
-	// 3. Return response DTO
-	return helper.Success(ctx, "LoggedIn student profile fetched successfully", dto.ToStudentResponseDTO(student))
+	  student_service,_:=cl.studentService.UpdateStudentSemesterControllerService(userID,uint(id),&dto)
 }
+
