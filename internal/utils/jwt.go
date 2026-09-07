@@ -81,13 +81,11 @@ func RefreshAccessToken(refreshToken string) (string, error) {
 		return "", errors.New("invalid session id")
 	}
 
-	// Only generate a NEW ACCESS TOKEN
 	return GenerateAccessToken(
 		uint(userIDFloat),
 		sessionID,
 	)
 }
-
 
 func SignUpToken() string {
 	b := make([]byte, 32)

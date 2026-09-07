@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8b082b2f-7c15-4a64-af32-55dbd7c570b5",
     "name": "Backend Institutions Complete API Collection",
-    "description": "Complete collection covering all endpoints including Authentication, Super Admin, RBAC, Institutions, Departments, Faculties, Students, Fees, and Payments.",
+    "description": "Complete collection covering all endpoints including Authentication, Super Admin, RBAC, Institutions, Departments, Faculties, and Students.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -440,7 +440,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"permission_names\": [\n    \"VIEW_FEES\",\n    \"CREATE_PAYMENT\",\n    \"VIEW_PAYMENTS\"\n  ]\n}"
+              "raw": "{\n  \"permission_names\": [\n    \"VIEW_STUDENTS\",\n    \"CREATE_STUDENT\"\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/roles/1/permissions",
@@ -634,7 +634,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"department_name\": \"Computer Science and Engineering\",\n  \"institution_id\": 1,\n  \"fee_amount\": 100000\n}"
+              "raw": "{\n  \"department_name\": \"Computer Science and Engineering\",\n  \"institution_id\": 1,\n  \"course_duration\": 4\n}"
             },
             "url": {
               "raw": "{{base_url}}/departments",
@@ -912,232 +912,6 @@
           }
         }
       ]
-    },
-    {
-      "name": "6. Fees & Payments",
-      "item": [
-        {
-          "name": "Create Student Fee Record",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"department_id\": 1,\n  \"semester\": 1,\n  \"college_amount\": 40000,\n  \"hostel_amount\": 15000\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/fees",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Department Fee by Semester",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees/department/1/semester/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "department",
-                "1",
-                "semester",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Department Fees",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees/department/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "department",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Fee by ID",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get All Fees",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees?page=1&limit=10",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "10"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Update Fee",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"college_amount\": 45000,\n  \"hostel_amount\": 18000\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/fees/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Delete Fee",
-          "request": {
-            "method": "DELETE",
-            "url": {
-              "raw": "{{base_url}}/fees/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Create Payment Installment",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fee_id\": 8,\n  \"amount_paid\": 75000,\n  \"payment_mode\": \"UPI\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/fees/payment",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "payment"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Payment by ID",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees/payment/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "payment",
-                "1"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Payments for a Fee Record",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees/1/payments",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "1",
-                "payments"
-              ]
-            }
-          }
-        },
-        {
-          "name": "Get Fees by Student ID",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/fees/student/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "fees",
-                "student",
-                "1"
-              ]
-            }
-          }
-        }
-      ]
     }
   ],
   "variable": [
@@ -1168,11 +942,6 @@
     },
     {
       "key": "student_id",
-      "value": "1",
-      "type": "string"
-    },
-    {
-      "key": "fee_id",
       "value": "1",
       "type": "string"
     }

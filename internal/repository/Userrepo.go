@@ -156,49 +156,43 @@ func (r *UserRepository) IsInstitutionAdmin(userID uint) (bool, uint, error) {
 	return false, 0, nil
 }
 
-// CanManageStudentFees checks whether the user has permission to view or manage student fee records
-func (r *UserRepository) CanManageStudentFees(currentUserID uint, studentID uint) (bool, error) {
-	if currentUserID == 0 || studentID == 0 {
-		return false, errors.New("invalid user or student ID")
+// HasInstitutionAccess checks if a user has access rights to a specific institution
+func (r *UserRepository) HasInstitutionAccess(userID uint, institutionID uint) (bool, error) {
+	if userID == 0 {
+		return false, errors.New("invalid user id")
 	}
 
-	// 1. Fetch user record
-	var currentUser model.User
-	if err := r.db.Where("id = ? AND deleted_at IS NULL", currentUserID).First(&currentUser).Error; err != nil {
-		return false, err
+	// 1. Super admin has access to all institutions
+	roles, err := r.GetUserRoles(userID)
+	if err == nil {
+		for _, role := range roles {
+			if role == "super admin" || role == "super_admin" || role == "superadmin" {
+				return true, nil
+			}
+		}
 	}
 
-	// 2. Student self-access check
-	if currentUser.StudentID > 0 && currentUser.StudentID == studentID {
-		return true, nil
-	}
-
-	// 3. Resolve student's institution
-	var student model.Student
-	err := r.db.Preload("Faculty.Department").Where("id = ? AND deleted_at IS NULL", studentID).First(&student).Error
-	if err != nil || student.ID == 0 {
-		return false, errors.New("student institution not found")
-	}
-	studentInstID := student.Faculty.Department.InstitutionID
-
-	// 4. Institution admin access check
-	isInstAdmin, assignedInstID, _ := r.IsInstitutionAdmin(currentUserID)
+	// 2. Institution admin check
+	isInstAdmin, assignedInstID, _ := r.IsInstitutionAdmin(userID)
 	if isInstAdmin {
-		return assignedInstID > 0 && assignedInstID == studentInstID, nil
+		if assignedInstID > 0 {
+			return assignedInstID == institutionID, nil
+		}
+		var count int64
+		_ = r.db.Table("institution_admins").Where("user_id = ? AND institution_id = ?", userID, institutionID).Count(&count).Error
+		if count > 0 {
+			return true, nil
+		}
 	}
 
-	
-
-	// 6. Assigned faculty check
-	if currentUser.FacultyID > 0 && currentUser.FacultyID == student.FacultyID {
-		return true, nil
+	// 3. Check user's direct institution mapping (faculty or student)
+	userInstID, err := r.GetUserInstitutionID(userID)
+	if err == nil && userInstID > 0 {
+		return userInstID == institutionID, nil
 	}
 
 	return false, nil
 }
-
-// HasInstitutionAccess checks if a user has access rights to a specific institution
-
 
 // UpdateStudentID sets student_id on user record
 func (r *UserRepository) UpdateStudentID(userID uint, studentID uint) error {

@@ -17,7 +17,6 @@ func NewApp(
 	departmentController *controller.DepartmentController,
 	facultyController *controller.FacultyController,
 	studentController *controller.StudentController,
-	feesController *controller.FeesController,
 	roleController *controller.RoleController,
 ) *fiber.App {
 	app := fiber.New()
@@ -28,7 +27,6 @@ func NewApp(
 		departmentController,
 		facultyController,
 		studentController,
-		feesController,
 		roleController,
 	)
 	return app
@@ -41,7 +39,6 @@ func RegisterRoutes(
 	departmentController *controller.DepartmentController,
 	facultyController *controller.FacultyController,
 	studentController *controller.StudentController,
-	feesController *controller.FeesController,
 	roleController *controller.RoleController,
 ) {
 
@@ -114,31 +111,14 @@ func RegisterRoutes(
 	FacultyRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewIDFaculties), facultyController.GetFacultyByIDController)
 	FacultyRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateFaculties), facultyController.UpdateFacultyController)
 	FacultyRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteFaculties), facultyController.DeleteFacultyController)
-	FacultyRoute.Get("/student/paidstudents", middleware.RequirePermission(constants.PermissionFacultyViewStudents),facultyController.GetPaidStudentsForFacultyController)
-	FacultyRoute.Get("/student/nonpaidstudents", middleware.RequirePermission(constants.PermissionFacultyViewStudents),facultyController.GetNonPaidStudentsForFacultyController)
 
 	StudentRoute := protected.Group("/students")
 	StudentRoute.Post("", middleware.RequirePermission(constants.PermissionCreateStudents), studentController.CreateStudentControllers)
 	StudentRoute.Get("", middleware.RequirePermission(constants.PermissionViewStudents), studentController.FetchAllStudentsPaginatedControllers)
-
 	StudentRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewStudentsID), studentController.GetStudentByIDControllers)
 	StudentRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateStudents), studentController.UpdateStudentController)
 	StudentRoute.Patch("/:id", middleware.RequirePermission(constants.PermissionUpdateStudents),studentController.UpdateStudentSemesterController)
 	StudentRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteStudents), studentController.DeleteStudentControllers)
-
-	FeesRoute := protected.Group("/fees")
-	FeesRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFees), feesController.CreateFeesController)
-	FeesRoute.Get("/department/:departmentId", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetDepartmentFeesController)
-	FeesRoute.Get("", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetAllFeesController)
-	FeesRoute.Get("/all", middleware.RequirePermission(constants.PermissionViewFees), feesController.FetchAllFeesController)
-	FeesRoute.Get("/my-fees", middleware.RequirePermission(constants.PermissionViewFees), feesController.GetMyFeesController)
-	FeesRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewIDFees), feesController.GetFeesByIDController)
-	FeesRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateFees), feesController.UpdateFeesController)
-	FeesRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteFees), feesController.DeleteFeesController)
-	FeesRoute.Post("/payment", middleware.RequirePermission(constants.PermissionCreatePayment), feesController.CreatePayment)
-	FeesRoute.Get("/payment/:id", middleware.RequirePermission(constants.PermissionViewPayments), feesController.GetPaymentByIDController)
-	FeesRoute.Get("/:fee_id/payments", middleware.RequirePermission(constants.PermissionViewPayments), feesController.GetPaymentByFeeIDController)
-	FeesRoute.Get("/student/:id", middleware.RequirePermission(constants.PermissionViewFees), feesController.FetchFeesByStudentID)
 
 	userRoute := protected.Group("/users")
 	userRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionAssignRoles), userController.DeleteUserController)

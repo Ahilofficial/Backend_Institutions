@@ -67,8 +67,6 @@ func (r *StudentRepository) FetchStudent() ([]model.Student, error) {
 	err := r.db.
 		Where("deleted_at IS NULL").
 		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
 		Find(&students).Error
 
 	if err != nil {
@@ -116,8 +114,6 @@ func (r *StudentRepository) FetchStudentPaginated(
 
 	err := query.
 		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
 		Limit(limit).
 		Offset(offset).
 		Find(&students).Error
@@ -138,8 +134,6 @@ func (r *StudentRepository) FetchStudentById(
 	err := r.db.
 		Where("id = ? AND deleted_at IS NULL", id).
 		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
 		First(&student).Error
 
 	if err != nil {
@@ -184,8 +178,6 @@ func (r *StudentRepository) GetActiveStudent() (model.Student, error) {
 	err := r.db.
 		Where("is_active = ? AND deleted_at IS NULL", true).
 		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
 		First(&student).Error
 
 	if err != nil {
@@ -333,8 +325,6 @@ func (r *StudentRepository) FetchStudentByInstitution(instID uint) ([]model.Stud
 
 	err := dbQuery.
 		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
 		Find(&students).Error
 
 	return students, err
@@ -392,8 +382,6 @@ func (r *StudentRepository) FetchStudentPaginatedWithInstitution(
 
 	err := query.
 		Preload("Faculty").
-		Preload("Fees").
-		Preload("Fees.Payments").
 		Limit(limit).
 		Offset(offset).
 		Find(&students).Error
@@ -448,29 +436,11 @@ func (r *StudentRepository) GetInstitutionByStudentID(studentID uint) (uint, err
 	return r.GetInstitutionIDByStudent(studentID)
 }
 
-func (r *StudentRepository) CreateStudentPayment(payment *model.StudentPayment) error {
-	return r.db.Create(payment).Error
-}
 
-func (r *StudentRepository) UpsertStudentPayment(payment *model.StudentPayment) error {
-	var existing model.StudentPayment
-	err := r.db.Where("student_id = ? AND semester = ? AND deleted_at IS NULL", payment.StudentID, payment.Semester).First(&existing).Error
-	if err == nil && existing.ID > 0 {
-		existing.PaymentID = payment.PaymentID
-		existing.TotalAmount = payment.TotalAmount
-		existing.Status = payment.Status
-		existing.UpdatedAt = time.Now()
-		return r.db.Save(&existing).Error
-	}
-	return r.db.Create(payment).Error
-}
 
-func (r *StudentRepository) UpdateStudentPendingStatus(studentID uint, pending bool) error {
-	return r.db.Model(&model.Student{}).Where("id = ? AND deleted_at IS NULL", studentID).Update("pending", pending).Error
-}
-
-func (r *StudentRepository) FetchStudentPaymentsByStudentID(studentID uint) ([]model.StudentPayment, error) {
-	var payments []model.StudentPayment
-	err := r.db.Where("student_id = ? AND deleted_at IS NULL", studentID).Find(&payments).Error
-	return payments, err
+// FetchStudentsByDepartmentAndSemester retrieves all active students in a department and semester
+func (r *StudentRepository) FetchStudentsByDepartmentAndSemester(departmentID uint, semester uint) ([]model.Student, error) {
+	var students []model.Student
+	err := r.db.Where("department_id = ? AND semester = ? AND is_active = true AND deleted_at IS NULL", departmentID, semester).Find(&students).Error
+	return students, err
 }

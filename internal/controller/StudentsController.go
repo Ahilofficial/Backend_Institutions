@@ -30,7 +30,7 @@ func NewStudentController(studentService *services.StudentService, userService *
 	}
 }
 
-// CreateStudentControllers handles creation and fee initialization for a student
+// CreateStudentControllers handles creation for a student
 func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 	// 1. Extract authenticated user ID from context
 	userID, ok := c.Locals("user_id").(uint)
@@ -50,7 +50,7 @@ func (cl *StudentController) CreateStudentControllers(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 4. Delegate student creation and fee calculation to service
+	// 4. Delegate student creation to service
 	createdStudent, err := cl.studentService.CreateStudentService(userID, &body)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
@@ -97,7 +97,7 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 
 	// 5. Fetch student details from service
 	student, err := cl.studentService.GetStudentServiceById(
-		userID,
+		// userID,
 		studentID,
 	)
 	if err != nil {
@@ -174,7 +174,7 @@ func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 	)
 }
 
-// UpdateStudentSemesterController handles updating student semester and recalculating fee quotas
+// UpdateStudentSemesterController handles updating student semester
 // DeleteStudentControllers handles soft deletion of a student profile
 func (cl *StudentController) DeleteStudentControllers(c fiber.Ctx) error {
 	// 1. Extract authenticated user ID
@@ -270,22 +270,35 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 		},
 	)
 }
-func(cl *StudentController)UpdateStudentSemesterController(c fiber.Ctx)(error){
-	  userID, _:= c.Locals("user_id").(uint)
-	  sid:=c.Params("id")
-	  id,_:=strconv.ParseUint(sid, 10, 32)
+func (cl *StudentController) UpdateStudentSemesterController(c fiber.Ctx) error {
+	userID, _ := c.Locals("user_id").(uint)
+	sid := c.Params("id")
+	id, err := strconv.ParseUint(sid, 10, 32)
+	if err != nil || id == 0 {
+		return helper.Error(c, 400, "invalid student ID")
+	}
 
-      var dto dto.UpdateSemesterDTO
-	  err:=c.Bind().Body(&dto)
-	  if err != nil {
-		return err
-	  }
+	var body dto.UpdateSemesterDTO
+	if err := c.Bind().Body(&body); err != nil {
+		return helper.Error(c, 400, "invalid request body: "+err.Error())
+	}
+	body.Sanitize()
+	if err := body.Validate(); err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
 	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
-	  student_service,_:=cl.studentService.UpdateStudentSemesterControllerService(userID,uint(id),&dto)
+
+	student, err := cl.studentService.UpdateStudentSemesterControllerService(userID, uint(id), &body)
+	if err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
+	return helper.Success(c, "Student semester updated successfully", dto.ToStudentResponseDTO(student))
 }
 

@@ -4,12 +4,12 @@ import (
 	"backend_institutions/internal/database"
 	"backend_institutions/internal/grpc"
 	"backend_institutions/internal/model"
-	
+
 	"backend_institutions/internal/seeds"
 	"backend_institutions/internal/wire"
+	"github.com/joho/godotenv"
 	"log"
 	"os"
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -28,15 +28,11 @@ func main() {
 		&model.Department{},
 		&model.Faculty{},
 		&model.Student{},
-		&model.Fees{},
 		&model.User{},
 		&model.Role{},
 		&model.Permission{},
 		&model.Session{},
-		&model.Payment{},
-		&model.StudentPayment{},
 		&model.Institution_Admins{},
-		// &model.StudentVerificationAccess{},
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -63,6 +59,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to Notification Service:", err)
 	}
-	
+
 	log.Fatal(app.Listen(":" + port))
 }

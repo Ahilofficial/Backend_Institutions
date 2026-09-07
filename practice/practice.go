@@ -1,18 +1,23 @@
-package main
+// Program to pass pointer as a function argument
 
+package main
 import "fmt"
 
+// function definition with a pointer argument
+func update(num *int) {
+
+  // dereference the pointer
+  *num = 30
+
+} 
+
 func main() {
-	age := 21
+ 
+  var number = 55
 
-	// 1. Create a pointer called agePointer
-	agePointer:=*age	
+  // function call
+  update(&number)
+  
+  fmt.Println("The number is", number)
 
-	// 2. Print age
-	fmt.Print(age)
-
-	// 3. Print the address
-	fmt.Print(&val)
-
-	// 4. Print the value using the pointer
 }

@@ -70,7 +70,7 @@ func (r *DepartmentRepository) FetchDepartment() ([]model.Department, error) {
 	return depts, err
 }
 
-// FetchDepartmentPaginated fetches paginated departments with preloaded faculty, student, and fee hierarchy
+// FetchDepartmentPaginated fetches paginated departments with preloaded faculty and student hierarchy
 func (r *DepartmentRepository) FetchDepartmentPaginated(page, limit int) ([]model.Department, int64, error) {
 	var (
 		depts []model.Department
@@ -88,39 +88,6 @@ func (r *DepartmentRepository) FetchDepartmentPaginated(page, limit int) ([]mode
 	err := r.db.
 		Preload("Faculties").
 		Preload("Faculties.Students").
-		Preload("Faculties.Students.Fees").
-		Preload("Faculties.Students.Fees.Payments").
-		Limit(limit).
-		Offset(offset).
-		Find(&depts).Error
-
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return depts, total, nil
-}
-
-// FetchDepartmentPaginatedByInstitution fetches paginated departments for a specific institution
-func (r *DepartmentRepository) FetchDepartmentPaginatedByInstitution(institutionID uint, page, limit int) ([]model.Department, int64, error) {
-	var (
-		depts []model.Department
-		total int64
-	)
-
-	query := r.db.Model(&model.Department{}).Where("institution_id = ? AND deleted_at IS NULL", institutionID)
-
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	offset := (page - 1) * limit
-
-	err := query.
-		Preload("Faculties").
-		Preload("Faculties.Students").
-		Preload("Faculties.Students.Fees").
-		Preload("Faculties.Students.Fees.Payments").
 		Limit(limit).
 		Offset(offset).
 		Find(&depts).Error
@@ -139,8 +106,6 @@ func (r *DepartmentRepository) FetchDepartmentById(id uint) (model.Department, e
 	err := r.db.
 		Preload("Faculties").
 		Preload("Faculties.Students").
-		Preload("Faculties.Students.Fees").
-		Preload("Faculties.Students.Fees.Payments").
 		Where("id = ? AND deleted_at IS NULL", id).
 		First(&dept).Error
 
@@ -192,28 +157,7 @@ func (r *DepartmentRepository) UpdateDepartmentById(department *model.Department
 	return err
 }
 
-// GetDepartmentFee retrieves default fee amount for department
-func (r *DepartmentRepository) GetDepartmentFee(departmentID uint) (float64, error) {
-	var feeAmount float64
-	err := r.db.Raw("SELECT fee_amount FROM departments WHERE id = ? AND deleted_at IS NULL LIMIT 1", departmentID).Scan(&feeAmount).Error
-	if err != nil {
-		return 0, err
-	}
-	return feeAmount, nil
-}
 
-// UpdateDepartmentFeeAndPaymentID updates fee amounts and payment configuration for department
-func (r *DepartmentRepository) UpdateDepartmentFeeAndPaymentID(departmentID uint, collegeAmount float64, hostelAmount float64, feeAmount float64, paymentID uint) error {
-	db, err := r.db.DB()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(
-		"UPDATE departments SET college_amount = ?, hostel_amount = ?, fee_amount = ?, payment_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
-		collegeAmount, hostelAmount, feeAmount, paymentID, time.Now(), departmentID,
-	)
-	return err
-}
 
 // GetDepartmentByID retrieves single department by ID without preloads
 func (r *DepartmentRepository) GetDepartmentByID(departmentID uint) (model.Department, error) {

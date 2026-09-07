@@ -32,9 +32,8 @@ func (dto *CreateDepartmentDTO) Validate() error {
 }
 
 type UpdateDepartmentDTO struct {
-	DepartmentName string  `json:"department_name"`
-	FeeAmount      float64 `json:"fee_amount"`
-	CourseDuration uint    `json:"course_duration"`
+	DepartmentName string `json:"department_name"`
+	CourseDuration uint   `json:"course_duration"`
 }
 
 func (dto *UpdateDepartmentDTO) Sanitize() {
@@ -52,10 +51,6 @@ func (dto *UpdateDepartmentDTO) Validate() error {
 type DepartmentResponseDTO struct {
 	ID             uint                 `json:"id"`
 	DepartmentName string               `json:"department_name"`
-	CollegeAmount  float64              `json:"college_amount"`
-	HostelAmount   float64              `json:"hostel_amount"`
-	FeeAmount      float64              `json:"fee_amount"`
-	PaymentID      uint                 `json:"payment_id"`
 	InstitutionID  uint                 `json:"institution_id"`
 	IsActive       bool                 `json:"isactive"`
 	Faculties      []FacultyResponseDTO `json:"faculties"`

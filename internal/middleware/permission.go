@@ -26,6 +26,20 @@ func RequirePermission(permission string) fiber.Handler {
 			return c.Next()
 		}
 
+		var isInstAdmin bool
+		_ = database.DB.Raw(`
+			SELECT EXISTS(
+				SELECT 1 FROM user_roles ur 
+				JOIN roles r ON r.id = ur.role_id 
+				WHERE ur.user_id = ? AND LOWER(TRIM(r.name)) IN ('institution admin', 'institution_admin', 'institutionadmin', 'inst_admin', 'admin')
+			) OR EXISTS(
+				SELECT 1 FROM institution_admins WHERE user_id = ?
+			)
+		`, userID, userID).Scan(&isInstAdmin)
+		if isInstAdmin {
+			return c.Next()
+		}
+
 		var count int64
 		_ = database.DB.Raw(`
 			SELECT COUNT(*) FROM user_roles ur

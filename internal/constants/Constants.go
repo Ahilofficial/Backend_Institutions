@@ -25,26 +25,7 @@ const (
 	PermissionUpdateStudents = "UPDATE_STUDENT"
 	PermissionDeleteStudents = "DELETE_STUDENT"
 	PermissionViewStudentsID = "VIEW_STUDENT_ID"
-
-	PermissionCreatePayments = "CREATE_PAYMENTS"
-	PermissionViewPayments   = "VIEW_PAYMENTS"
-	PermissionUpdatePayments = "UPDATE_PAYMENTS"
-	PermissionDeletePayments = "DELETE_PAYMENTS"
-	PermissionViewIDPayments = "VIEW_ID_PAYMENTS"
-	PermissionCreatePayment  = "CREATE_PAYMENT"
-
-	PermissionCreateFees = "CREATE_FEE"
-	PermissionViewFees   = "VIEW_FEES"
-	PermissionUpdateFees = "UPDATE_FEE"
-	PermissionDeleteFees = "DELETE_FEE"
-	PermissionViewIDFees = "VIEW_ID_FEES"
-
-	PermissionCreateSemesterFee = "CREATE_SEMESTER_FEE"
-	PermissionViewSemesterFee   = "VIEW_SEMESTER_FEE"
-	PermissionUpdateSemesterFee = "UPDATE_SEMESTER_FEE"
-	PermissionDeleteSemesterFee = "DELETE_SEMESTER_FEE"
 	PermissionPromoteStudent    = "PROMOTE_STUDENT"
-
 	PermissionManageInstitution = "institution.manage"
 
 	PermissionAssignRoles         = "ASSIGN_ROLE"
@@ -77,22 +58,8 @@ var AllPermissions = []string{
 	PermissionViewStudentsID,
 	PermissionPromoteStudent,
 
-	PermissionCreateFees,
-	PermissionViewFees,
-	PermissionUpdateFees,
-	PermissionDeleteFees,
-	PermissionViewIDFees,
-
-	PermissionCreateSemesterFee,
-	PermissionViewSemesterFee,
-	PermissionUpdateSemesterFee,
-	PermissionDeleteSemesterFee,
-
-	PermissionViewPayments,
 	PermissionAdminPermission,
 	PermissionManageInstitution,
-	PermissionViewIDPayments,
-	PermissionCreatePayment,
 
 	PermissionAssignRoles,
 

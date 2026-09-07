@@ -184,8 +184,6 @@ func (s *UserService) SignUpWithRole(
 		); 
 	}(user.Email, subject, body)
 
-	user.Roles = []model.Role{role}
-
 	return user, nil
 }
 
@@ -387,7 +385,7 @@ func (s *UserService) VerifyEmail(token string) error {
 		return errors.New("invalid verification link")
 	}
 
-	// 2. Check if already verified
+	// 2. Check // 2. Check if already verifiedif already verified
 	if user.IsVerified {
 		return errors.New("email already verified")
 	}
