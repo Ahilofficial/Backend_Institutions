@@ -13,6 +13,7 @@ type StudentService struct {
 	facultyRepo    *repository.FacultyRepository
 	userRepo       *repository.UserRepository
 	departmentRepo *repository.DepartmentRepository
+	paymentRepo    *repository.PaymentRepository
 }
 
 func NewStudentService(
@@ -20,12 +21,14 @@ func NewStudentService(
 	facultyRepo *repository.FacultyRepository,
 	userRepo *repository.UserRepository,
 	departmentRepo *repository.DepartmentRepository,
+	paymentRepo *repository.PaymentRepository,
 ) *StudentService {
 	return &StudentService{
 		studentRepo:    studentRepo,
 		facultyRepo:    facultyRepo,
 		userRepo:       userRepo,
 		departmentRepo: departmentRepo,
+		paymentRepo:    paymentRepo,
 	}
 }
 
@@ -44,7 +47,7 @@ func (s *StudentService) CreateStudentService(
 
 	if createstudent.MQ && createstudent.Scholorship {
 		return nil, errors.New(
-			"Student enrolled in Management Quota will not have scholarship",
+			"cant able to add scholorship for MQ students",
 		)
 	}
 
@@ -75,6 +78,34 @@ func (s *StudentService) CreateStudentService(
 		)
 	}
 
+	// Check whether the student department and payment was already configured in department payment table
+	deptPayment, err := s.paymentRepo.GetDepartmentPaymentBySemester(dept.ID, createstudent.Semester)
+	if err != nil || deptPayment == nil || deptPayment.ID == 0 {
+		return nil, errors.New("you need to configure payment first")
+	}
+
+	// Calculate base fee amounts
+	collegeFee := deptPayment.CollegeAmount
+	hostelFee := 0.0
+	if createstudent.Hosteller {
+		hostelFee = deptPayment.HostelAmount
+	}
+
+	// Apply MQ and Scholarship adjustments
+	if createstudent.MQ {
+		collegeFee += collegeFee * 0.50
+		if createstudent.Hosteller {
+			hostelFee += hostelFee * 0.20
+		}
+	} else if createstudent.Scholorship {
+		collegeFee -= collegeFee * 0.25
+		if createstudent.Hosteller {
+			hostelFee -= hostelFee * 0.25
+		}
+	}
+
+	totalFee := collegeFee + hostelFee
+
 	// Check whether student profile already exists for this user (upsert if exists)
 	existingStudentID, _ := s.userRepo.GetUserStudentID(userID)
 	if existingStudentID > 0 {
@@ -88,6 +119,8 @@ func (s *StudentService) CreateStudentService(
 			existingStudent.Semester = createstudent.Semester
 			existingStudent.FacultyID = createstudent.FacultyID
 			existingStudent.DepartmentID = dept.ID
+			existingStudent.FeeAmount = totalFee
+			existingStudent.Pending = (existingStudent.PaidAmount < totalFee)
 
 			if err := s.studentRepo.UpdateStudentById(&existingStudent); err != nil {
 				return nil, err
@@ -105,6 +138,9 @@ func (s *StudentService) CreateStudentService(
 		MQ:           createstudent.MQ,
 		Scholarship:  createstudent.Scholorship,
 		Semester:     createstudent.Semester,
+		FeeAmount:    totalFee,
+		PaidAmount:   0,
+		Pending:      true,
 		UserID:       userID,
 		FacultyID:    createstudent.FacultyID,
 		DepartmentID: dept.ID,
@@ -240,7 +276,34 @@ func (s *StudentService) UpdateStudentSemesterControllerService(userID uint, id 
 		return nil, errors.New("semester exceeds course duration")
 	}
 
+	// Check whether payment is configured for new semester
+	deptPayment, err := s.paymentRepo.GetDepartmentPaymentBySemester(student.DepartmentID, dto.Semester)
+	if err != nil || deptPayment == nil || deptPayment.ID == 0 {
+		return nil, errors.New("you need to configure payment first")
+	}
+
+	collegeFee := deptPayment.CollegeAmount
+	hostelFee := 0.0
+	if student.Hosteller {
+		hostelFee = deptPayment.HostelAmount
+	}
+
+	if student.MQ {
+		collegeFee += collegeFee * 0.50
+		if student.Hosteller {
+			hostelFee += hostelFee * 0.20
+		}
+	} else if student.Scholarship {
+		collegeFee -= collegeFee * 0.25
+		if student.Hosteller {
+			hostelFee -= hostelFee * 0.25
+		}
+	}
+
+	totalFee := collegeFee + hostelFee
 	student.Semester = dto.Semester
+	student.FeeAmount = totalFee
+	student.Pending = (student.PaidAmount < totalFee)
 
 	if err := s.studentRepo.UpdateStudentById(&student); err != nil {
 		return nil, err

@@ -185,6 +185,51 @@ func (cl *FacultyController) GetLoggedInFacultyStudentsController(c fiber.Ctx) e
 	)
 }
 
+// GetPaidStudentsForFacultyController fetches all fully paid students assigned to the logged-in faculty
+func (cl *FacultyController) GetPaidStudentsForFacultyController(c fiber.Ctx) error {
+	// 1. Extract authenticated user ID
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
+	// 2. Fetch paid students list via service
+	paidStudents, err := cl.facultyService.GetPaidStudentsForFacultyService(userID)
+	if err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
+	// 3. Return response DTO list
+	return helper.Success(
+		c,
+		"Paid students fetched successfully",
+		dto.ToStudentResponseListDTO(paidStudents),
+	)
+}
+
+// GetNonPaidStudentsForFacultyController fetches non-paid students assigned to the logged-in faculty
+func (cl *FacultyController) GetNonPaidStudentsForFacultyController(c fiber.Ctx) error {
+	// 1. Extract authenticated user ID
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok || userID == 0 {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
+	// 2. Fetch pending students list via service
+	nonPaidStudents, err := cl.facultyService.GetNonPaidStudentsForFacultyService(userID)
+	if err != nil {
+		return helper.Error(c, 400, err.Error())
+	}
+
+	// 3. Return response DTO list
+	return helper.Success(
+		c,
+		"Non-paid students fetched successfully",
+		dto.ToStudentResponseListDTO(nonPaidStudents),
+	)
+}
+
+
 // UpdateFacultyController handles updating faculty profile details
 func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 	// 1. Extract authenticated user ID

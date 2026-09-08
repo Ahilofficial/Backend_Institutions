@@ -34,8 +34,19 @@ func NewFacultyService(
 func (s *FacultyService) GetFacultyIDForUserService(
 	userID uint,
 ) (uint, error) {
-	return s.userRepo.GetUserFacultyID(userID)
+	facultyID, err := s.userRepo.GetUserFacultyID(userID)
+	if err == nil && facultyID > 0 {
+		return facultyID, nil
+	}
+
+	faculty, err := s.facultyRepo.FetchByUserID(userID)
+	if err == nil && faculty.ID > 0 {
+		return faculty.ID, nil
+	}
+
+	return 0, errors.New("faculty profile not found for this user")
 }
+
 
 // CreateFacultyService validates requirements and registers a new faculty profile
 func (s *FacultyService) CreateFacultyService(
@@ -151,15 +162,34 @@ func (s *FacultyService) GetLoggedInFacultyProfile(userID uint) (*model.Faculty,
 
 // GetLoggedInFacultyStudents fetches all students assigned to the logged-in faculty member
 func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Student, error) {
-	// 1. Retrieve faculty ID linked to user
-	facultyID, err := s.userRepo.GetUserFacultyID(userID)
+	facultyID, err := s.GetFacultyIDForUserService(userID)
 	if err != nil || facultyID == 0 {
 		return nil, errors.New("faculty profile not created yet for logged in user")
 	}
 
-	// 2. Fetch students assigned to this faculty ID
 	return s.facultyRepo.FetchStudentsByFacultyID(facultyID)
 }
+
+// GetPaidStudentsForFacultyService fetches all paid students assigned to the logged-in faculty member
+func (s *FacultyService) GetPaidStudentsForFacultyService(userID uint) ([]model.Student, error) {
+	facultyID, err := s.GetFacultyIDForUserService(userID)
+	if err != nil || facultyID == 0 {
+		return nil, errors.New("faculty profile not created yet for logged in user")
+	}
+
+	return s.facultyRepo.FetchPaidStudentsByFacultyID(facultyID)
+}
+
+// GetNonPaidStudentsForFacultyService fetches all non-paid (pending) students assigned to the logged-in faculty member
+func (s *FacultyService) GetNonPaidStudentsForFacultyService(userID uint) ([]model.Student, error) {
+	facultyID, err := s.GetFacultyIDForUserService(userID)
+	if err != nil || facultyID == 0 {
+		return nil, errors.New("faculty profile not created yet for logged in user")
+	}
+
+	return s.facultyRepo.FetchNonPaidStudentsByFacultyID(facultyID)
+}
+
 
 // DeleteFacultyService handles soft deletion of a faculty record
 func (s *FacultyService) DeleteFacultyService(

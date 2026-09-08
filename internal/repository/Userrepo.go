@@ -604,7 +604,7 @@ func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
 		return 0, nil
 	}
 
-	var studentID uint
+	var studentID *uint
 
 	err := r.db.Raw(`
 		SELECT student_id
@@ -618,8 +618,13 @@ func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
 		return 0, err
 	}
 
-	return studentID, nil
+	if studentID == nil {
+		return 0, nil
+	}
+
+	return *studentID, nil
 }
+
 
 
 // GetInstitutionAdminID gets institution_id if user is institution admin

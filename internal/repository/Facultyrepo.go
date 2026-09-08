@@ -165,6 +165,31 @@ func (r *FacultyRepository) FetchStudentsByFacultyID(facultyID uint) ([]model.St
 	return students, nil
 }
 
+// FetchPaidStudentsByFacultyID retrieves all students assigned to a faculty ID who have fully paid their fees
+func (r *FacultyRepository) FetchPaidStudentsByFacultyID(facultyID uint) ([]model.Student, error) {
+	var students []model.Student
+	err := r.db.
+		Where("faculty_id = ? AND pending = ? AND deleted_at IS NULL", facultyID, false).
+		Find(&students).Error
+	if err != nil {
+		return nil, err
+	}
+	return students, nil
+}
+
+// FetchNonPaidStudentsByFacultyID retrieves all students assigned to a faculty ID who have pending fees
+func (r *FacultyRepository) FetchNonPaidStudentsByFacultyID(facultyID uint) ([]model.Student, error) {
+	var students []model.Student
+	err := r.db.
+		Where("faculty_id = ? AND pending = ? AND deleted_at IS NULL", facultyID, true).
+		Find(&students).Error
+	if err != nil {
+		return nil, err
+	}
+	return students, nil
+}
+
+
 // DeleteFaculty soft deletes a faculty record by setting is_active = false and deleted_at timestamp
 func (r *FacultyRepository) DeleteFaculty(id uint) error {
 	// 1. Get database handle

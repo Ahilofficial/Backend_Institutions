@@ -92,9 +92,12 @@ type StudentResponseDTO struct {
 	Hosteller   bool   `json:"hosteller"`
 	Scholorship bool   `json:"scholorship"`
 
-	MQ       bool               `json:"mq"`
-	Semester uint               `json:"semester"`
-	Faculty  *StudentFacultyDTO `json:"faculty,omitempty"`
+	MQ         bool               `json:"mq"`
+	Semester   uint               `json:"semester"`
+	FeeAmount  float64            `json:"fee_amount"`
+	PaidAmount float64            `json:"paid_amount"`
+	Pending    bool               `json:"pending"`
+	Faculty    *StudentFacultyDTO `json:"faculty,omitempty"`
 }
 
 func ToStudentResponseDTO(stud *model.Student) StudentResponseDTO {

@@ -23,20 +23,27 @@ func main() {
 
 	database.Connect()
 
+	_ = database.DB.Exec("SET FOREIGN_KEY_CHECKS = 0;").Error
+
 	err = database.DB.AutoMigrate(
+		&model.Role{},
+		&model.Permission{},
+		&model.User{},
 		&model.Institutions{},
 		&model.Department{},
 		&model.Faculty{},
 		&model.Student{},
-		&model.User{},
-		&model.Role{},
-		&model.Permission{},
+		&model.DepartmentPayment{},
+		&model.StudentPayment{},
 		&model.Session{},
 		&model.Institution_Admins{},
 	)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+
+
 
 	seeds.RunSeeders()
 

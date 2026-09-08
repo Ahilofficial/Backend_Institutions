@@ -35,10 +35,14 @@ func InitializeApp() (*fiber.App, error) {
 	departmentController := controller.NewDepartmentController(departmentService, instituteService, facultyService)
 	facultyController := controller.NewFacultyController(facultyService, userService, instituteService)
 	studentRepository := repository.NewStudentRepository(db)
-	studentService := services.NewStudentService(studentRepository, facultyRepository, userRepository, departmentRepository)
+	paymentRepository := repository.NewPaymentRepository(db)
+	studentService := services.NewStudentService(studentRepository, facultyRepository, userRepository, departmentRepository, paymentRepository)
 	studentController := controller.NewStudentController(studentService, userService, instituteService, facultyService)
+	paymentService := services.NewPaymentService(paymentRepository, institutionRepository, departmentRepository, userRepository)
+	paymentController := controller.NewPaymentController(paymentService)
 	roleService := services.NewRoleService(roleRepository)
 	roleController := controller.NewRoleController(roleService)
-	app := routes.NewApp(userController, instituteController, departmentController, facultyController, studentController, roleController)
+	app := routes.NewApp(userController, instituteController, departmentController, facultyController, studentController, roleController, paymentController)
 	return app, nil
 }
+

@@ -20,6 +20,10 @@ type Student struct {
 	MQ          bool `gorm:"default:false" json:"mq"`
 	Semester uint `gorm:"not null;default:1" json:"semester"`
 
+	FeeAmount  float64 `gorm:"type:decimal(10,2);default:0" json:"fee_amount"`
+	PaidAmount float64 `gorm:"type:decimal(10,2);default:0" json:"paid_amount"`
+	Pending    bool    `gorm:"default:true" json:"pending"`
+
 	IsProfileVerified bool `gorm:"default:false" json:"is_verified"`
 
 	UserID       uint `gorm:"not null;index" json:"user_id"`
@@ -29,4 +33,6 @@ type Student struct {
 	User       *User       `gorm:"foreignKey:UserID;references:ID" json:"user,omitempty"`
 	Faculty    *Faculty    `gorm:"foreignKey:FacultyID;references:ID" json:"faculty,omitempty"`
 	Department *Department `gorm:"foreignKey:DepartmentID;references:ID" json:"department,omitempty"`
+
+	StudentPayments []StudentPayment `gorm:"foreignKey:StudentID;references:ID" json:"student_payments,omitempty"`
 }

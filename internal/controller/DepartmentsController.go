@@ -57,6 +57,7 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 	department := model.Department{
 		DepartmentName: body.DepartmentName,
 		InstitutionID:  body.InstitutionID,
+		CourseDuration: body.CourseDuration,
 		IsActive:       true,
 	}
 

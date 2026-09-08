@@ -3,6 +3,7 @@ package middleware
 import (
 	"backend_institutions/internal/database"
 	"backend_institutions/internal/helper"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -14,31 +15,24 @@ func RequirePermission(permission string) fiber.Handler {
 			return helper.Error(c, 401, "user not authenticated")
 		}
 
+		role, _ := c.Locals("user_role").(string)
+		if role == "super_admin" || strings.EqualFold(strings.TrimSpace(role), "super_admin") {
+			return c.Next()
+		}
+
 		var isSuperAdmin bool
 		_ = database.DB.Raw(`
 			SELECT EXISTS(
 				SELECT 1 FROM user_roles ur 
 				JOIN roles r ON r.id = ur.role_id 
-				WHERE ur.user_id = ? AND LOWER(TRIM(r.name)) IN ('super admin', 'super_admin', 'superadmin')
+				WHERE ur.user_id = ? AND LOWER(TRIM(r.name)) = 'super_admin'
 			)
 		`, userID).Scan(&isSuperAdmin)
 		if isSuperAdmin {
 			return c.Next()
 		}
 
-		var isInstAdmin bool
-		_ = database.DB.Raw(`
-			SELECT EXISTS(
-				SELECT 1 FROM user_roles ur 
-				JOIN roles r ON r.id = ur.role_id 
-				WHERE ur.user_id = ? AND LOWER(TRIM(r.name)) IN ('institution admin', 'institution_admin', 'institutionadmin', 'inst_admin', 'admin')
-			) OR EXISTS(
-				SELECT 1 FROM institution_admins WHERE user_id = ?
-			)
-		`, userID, userID).Scan(&isInstAdmin)
-		if isInstAdmin {
-			return c.Next()
-		}
+		
 
 		var count int64
 		_ = database.DB.Raw(`

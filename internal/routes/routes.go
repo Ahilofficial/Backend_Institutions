@@ -18,6 +18,7 @@ func NewApp(
 	facultyController *controller.FacultyController,
 	studentController *controller.StudentController,
 	roleController *controller.RoleController,
+	paymentController *controller.PaymentController,
 ) *fiber.App {
 	app := fiber.New()
 	RegisterRoutes(
@@ -28,6 +29,7 @@ func NewApp(
 		facultyController,
 		studentController,
 		roleController,
+		paymentController,
 	)
 	return app
 }
@@ -40,6 +42,7 @@ func RegisterRoutes(
 	facultyController *controller.FacultyController,
 	studentController *controller.StudentController,
 	roleController *controller.RoleController,
+	paymentController *controller.PaymentController,
 ) {
 
 	
@@ -105,9 +108,11 @@ func RegisterRoutes(
 	DepartmentRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteDepartments), departmentController.DeleteDepartmentController)
 
 	FacultyRoute := protected.Group("/faculties")
-	FacultyRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFaculties), facultyController.CreateFacultyController)  //1
+	FacultyRoute.Post("", middleware.RequirePermission(constants.PermissionCreateFaculties), facultyController.CreateFacultyController)  
 	FacultyRoute.Get("", middleware.RequirePermission(constants.PermissionViewFaculties), facultyController.GetAllFacultiesController)
 	FacultyRoute.Get("/loginfaculty/students", middleware.RequirePermission(constants.PermissionFacultyViewStudents), facultyController.GetLoggedInFacultyStudentsController)
+	FacultyRoute.Get("/student/paidstudents", middleware.RequirePermission(constants.PermissionFacultyViewStudents), facultyController.GetPaidStudentsForFacultyController)
+	FacultyRoute.Get("/student/nonpaidstudents", middleware.RequirePermission(constants.PermissionFacultyViewStudents), facultyController.GetNonPaidStudentsForFacultyController)
 	FacultyRoute.Get("/:id", middleware.RequirePermission(constants.PermissionViewIDFaculties), facultyController.GetFacultyByIDController)
 	FacultyRoute.Put("/:id", middleware.RequirePermission(constants.PermissionUpdateFaculties), facultyController.UpdateFacultyController)
 	FacultyRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionDeleteFaculties), facultyController.DeleteFacultyController)
@@ -122,6 +127,16 @@ func RegisterRoutes(
 
 	userRoute := protected.Group("/users")
 	userRoute.Delete("/:id", middleware.RequirePermission(constants.PermissionAssignRoles), userController.DeleteUserController)
+
+	deptPaymentRoute := protected.Group("/department-payments")
+	deptPaymentRoute.Post("", middleware.RequirePermission(constants.PaymentCreation),paymentController.CreateDepartmentPaymentController)
+	deptPaymentRoute.Put("/:id",middleware.RequirePermission(constants.PaymentCreation), paymentController.UpdateDepartmentPaymentController)
+	deptPaymentRoute.Delete("/:id", middleware.RequirePermission(constants.PaymentCreation), paymentController.DeleteDepartmentPaymentController)
+	deptPaymentRoute.Get("/department/:departmentId/semester/:semester", middleware.RequirePermission(constants.PaymentCreation),paymentController.GetDepartmentPaymentBySemesterController)
+	deptPaymentRoute.Get("/department/:departmentId",middleware.RequirePermission(constants.PaymentCreation), paymentController.GetDepartmentPaymentsController)
+
+	studentPaymentRoute := protected.Group("/payments")
+	studentPaymentRoute.Post("/student",middleware.RequirePermission(constants.StudentPayments) ,paymentController.CreateStudentPaymentController)
 
 	fmt.Println("All routes registered successfully")
 }
