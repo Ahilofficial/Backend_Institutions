@@ -5,7 +5,7 @@ import (
 
 	"backend_institutions/EmailSender/notificationpb"
 	"backend_institutions/EmailSender/repository"
-	"backend_institutions/utilities"
+	// "backend_institutions/utilities"
 )
 
 type NotificationService struct {
@@ -30,11 +30,11 @@ func (s *NotificationService) SendMail(
 	err := s.repo.SendMail(req.To, subject, body)
 
 	if err != nil {
-		_ = utilities.WriteEmailLog(req.To, subject, false, err.Error())
+		// _ = utilities.WriteEmailLog(req.To, subject, false, err.Error())
 		return nil, err
 	}
 
-	_ = utilities.WriteEmailLog(req.To, subject, true, "")
+	// _ = utilities.WriteEmailLog(req.To, subject, true, "")
 
 	return &notificationpb.MailResponse{
 		Success: true,
