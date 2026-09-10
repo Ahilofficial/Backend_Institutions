@@ -96,3 +96,4 @@ func (s *InstituteService) UpdateInstitutionService(
 func (s *InstituteService) GetInstitutionIDByUserID(userID uint) (uint, error) {
 	return s.instituterepo.GetInstitutionIDByUserID(userID)
 }
+

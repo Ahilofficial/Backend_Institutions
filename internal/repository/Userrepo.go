@@ -534,12 +534,31 @@ func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
 		return 0, nil
 	}
 
-	var facultyID uint
+	var facultyID *uint
 
 	err := r.db.Raw(`
 		SELECT faculty_id
 		FROM users
-		WHERE id = ?
+		WHERE id = ?  / /_  / / __ \/ _ \/ ___/
+ / __/ / / /_/ /  __/ /
+/_/   /_/_.___/\___/_/          v3.4.0
+--------------------------------------------------
+INFO Server started on:         http://127.0.0.1:8090 (bound on host 0.0.0.0 and port 8090)
+INFO Total handlers:            150
+INFO Prefork:                   Disabled
+INFO PID:                       3962
+INFO Total process count:       1
+
+
+2026/09/10 10:49:13 /home/ahil/Backend_Institutions/internal/repository/Userrepo.go:674 Error 1054 (42S22): Unknown column 'r.role_name' in 'field list'
+[0.086ms] [rows:-] 
+                SELECT r.role_name
+                FROM user_roles ur
+                JOIN roles r ON r.role_id = ur.role_id
+                WHERE ur.user_id = 2
+                LIMIT 1
+
+2026/09/10 10:49:13 Error sending request/response log to gRPC service: rpc error: code = Unavailable desc = connection error: desc = "trans
 		  AND deleted_at IS NULL
 		LIMIT 1
 	`, userID).Scan(&facultyID).Error
@@ -548,9 +567,12 @@ func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
 		return 0, err
 	}
 
-	return facultyID, nil
-}
+	if facultyID == nil {
+		return 0, nil
+	}
 
+	return *facultyID, nil
+}
 func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
 	if userID == 0 {
 		return 0, nil
@@ -657,4 +679,27 @@ func (r *UserRepository) UpdateUserFacultyID(userID uint, facultyID uint) error 
 
 	res := r.db.Exec("UPDATE users SET faculty_id = ?, updated_at = NOW() WHERE id = ? AND deleted_at IS NULL", facultyID, userID)
 	return res.Error
+}
+
+func (r *UserRepository) IsSuperAdminRepo(userID uint) bool {
+	if userID == 0 {
+		return false
+	}
+
+	var roleName string
+
+	err := r.db.Raw(`
+		SELECT r.name
+		FROM user_roles ur
+		JOIN roles r ON r.id = ur.role_id
+		WHERE ur.user_id = ?
+		  AND r.deleted_at IS NULL
+		LIMIT 1
+	`, userID).Scan(&roleName).Error
+
+	if err != nil {
+		return false
+	}
+
+	return roleName == "super_admin"
 }

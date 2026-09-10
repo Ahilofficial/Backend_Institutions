@@ -34,7 +34,7 @@ func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 	if !ok || userID == 0 {
 		return helper.Error(c, 401, "Invalid user")
 	}
-
+	isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
 	idStr := c.Params("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil || id == 0 {
@@ -43,9 +43,11 @@ func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 	facultyID := uint(id)
 
 	userFacultyID, _ := cl.facultyService.GetFacultyIDForUserService(userID)
+	if !isSuperAdmin{
 	if userFacultyID != facultyID {
 		return helper.Error(c, 403, "Access denied: you can only access your own faculty profile")
 	}
+}
 		// for ins admin
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
@@ -206,7 +208,7 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
-
+isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
 	idParam := c.Params("id")
 	id, err := strconv.ParseUint(idParam, 10, 32)
 	if err != nil || id == 0 {
@@ -223,9 +225,12 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	if is_inst_admin && (checking_faculty_institution_id != loginnedUserInstitutionID) {
+	
+	if !isSuperAdmin{
+		if is_inst_admin && (checking_faculty_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
+}
 
 	var body dto.UpdateFacultyDTO
 	if err := c.Bind().Body(&body); err != nil {

@@ -411,3 +411,7 @@ func (s *UserService) GetProfileByID(id uint) (model.User, error) {
 
 	return user, nil
 }
+
+func (s *UserService) IsSuperAdminService(userID uint) bool {
+	return s.userrepo.IsSuperAdminRepo(userID)
+}

@@ -79,9 +79,11 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(studentID)
+	isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
+	if !isSuperAdmin{
 	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
-	}
+	}}
 
 	student, err := cl.studentService.GetStudentServiceById(
 
@@ -126,13 +128,15 @@ func (cl *StudentController) UpdateStudentController(c fiber.Ctx) error {
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
-
+	isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
-	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
+	if !isSuperAdmin{
+		if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
+}
 
 	student, err := cl.studentService.UpdateStudentService(
 		userID,
@@ -165,6 +169,7 @@ func (cl *StudentController) DeleteStudentControllers(c fiber.Ctx) error {
 	if err != nil {
 		return helper.Error(c, 400, "invalid student id")
 	}
+
 
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)

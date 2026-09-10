@@ -13,51 +13,78 @@ import (
 )
 
 func GetJWTSecret() []byte {
-	secret := os.Getenv("JWT_SECRET")
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+
 	if secret == "" {
 		secret = "supersecretkey"
 	}
+
 	return []byte(secret)
 }
 
 func GetJWTRefreshSecret() []byte {
 	secret := strings.TrimSpace(os.Getenv("JWT_REFRESH_SECRET"))
+
 	if secret == "" {
 		secret = "supersecretrefreshkey"
 	}
+
 	return []byte(secret)
 }
 
+// GenerateAccessToken creates a short-lived access token.
 func GenerateAccessToken(userID uint, sessionID string) (string, error) {
+
 	now := time.Now()
+
 	claims := jwt.MapClaims{
-		"session_id": sessionID,
 		"user_id":    userID,
+		"session_id": sessionID,
 		"iat":        now.Unix(),
 		"exp":        now.Add(15 * time.Minute).Unix(),
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(
+		jwt.SigningMethodHS256,
+		claims,
+	)
+
 	return token.SignedString(GetJWTSecret())
 }
 
+// GenerateRefreshToken creates a long-lived refresh token.
 func GenerateRefreshToken(userID uint, sessionID string) (string, error) {
+
 	now := time.Now()
+
 	claims := jwt.MapClaims{
-		"session_id": sessionID,
 		"user_id":    userID,
+		"session_id": sessionID,
 		"iat":        now.Unix(),
 		"exp":        now.Add(30 * 24 * time.Hour).Unix(),
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(
+		jwt.SigningMethodHS256,
+		claims,
+	)
+
 	return token.SignedString(GetJWTRefreshSecret())
 }
 
+// RefreshAccessToken verifies the refresh token
+// and generates a new access token.
 func RefreshAccessToken(refreshToken string) (string, error) {
+
 	token, err := jwt.Parse(
 		refreshToken,
 		func(token *jwt.Token) (interface{}, error) {
+
+			// Make sure the token uses HS256.
+			if token.Method != jwt.SigningMethodHS256 {
+				return nil, errors.New("unexpected signing method")
+			}
+
 			return GetJWTRefreshSecret(), nil
 		},
 	)

@@ -29,9 +29,6 @@ func NewFacultyService(
 }
 
 
-
-
-
 func (s *FacultyService) GetFacultyIDForUserService(
 	userID uint,
 ) (uint, error) {
@@ -217,4 +214,4 @@ func (s *FacultyService) UpdateFacultyService(
 }
 
 
-func(s *FacultyService)CheckFacultyInstitutionAccessService(userID uint, facultyID uint)
+
