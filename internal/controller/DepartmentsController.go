@@ -3,7 +3,6 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
-	"backend_institutions/internal/model"
 	"backend_institutions/internal/services"
 	"math"
 	"strconv"
@@ -11,14 +10,12 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-// DepartmentController handles HTTP requests for department operations
 type DepartmentController struct {
 	departmentService *services.DepartmentService
 	instituteService  *services.InstituteService
 	facultyService    *services.FacultyService
 }
 
-// NewDepartmentController initializes a new DepartmentController instance
 func NewDepartmentController(departmentService *services.DepartmentService, instituteService *services.InstituteService, facultyService *services.FacultyService) *DepartmentController {
 	return &DepartmentController{
 		departmentService: departmentService,
@@ -27,15 +24,13 @@ func NewDepartmentController(departmentService *services.DepartmentService, inst
 	}
 }
 
-// CreateDepartmentController creates a new academic department within an institution
 func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
-	// 1. Extract authenticated user ID
+
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
-	// 2. Bind and validate request body
 	var body dto.CreateDepartmentDTO
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
@@ -46,31 +41,19 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 3. Verify institution admin access boundaries
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	userInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	if is_inst_admin && (body.InstitutionID != userInstitutionID) {
+
 		return helper.Error(c, 403, "Cant able to access other institution")
+
 	}
 
-	// 4. Construct department model
-	department := model.Department{
-		DepartmentName: body.DepartmentName,
-		InstitutionID:  body.InstitutionID,
-		CourseDuration: body.CourseDuration,
-		IsActive:       true,
-	}
-
-	// 5. Persist department via service
-	createdDept, err := cl.departmentService.AddDepartmentService(
-		// userID,
-		&department,
-	)
+	createdDept, err := cl.departmentService.AddDepartmentService(&body)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 6. Return response with department DTO
 	return helper.Success(
 		c,
 		"Department created successfully",
@@ -78,25 +61,21 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 	)
 }
 
-// GetAllDepartmentsController retrieves paginated list of departments
 func (cl *DepartmentController) GetAllDepartmentsController(c fiber.Ctx) error {
-	// 1. Parse pagination query parameters
+
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
 
 	page, err := strconv.ParseUint(pageStr, 10, 64)
 	limit, err := strconv.ParseUint(limitStr, 10, 64)
 
-	// 2. Query paginated departments
 	departments, total, err := cl.departmentService.GetDepartmentServicePaginated(int(page), int(limit))
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
 
-	// 3. Calculate total page count
 	totalPages := int(math.Ceil(float64(total) / float64(limit)))
 
-	// 4. Return paginated response
 	return helper.Success(
 		c,
 		"Departments fetched successfully",
@@ -110,62 +89,19 @@ func (cl *DepartmentController) GetAllDepartmentsController(c fiber.Ctx) error {
 	)
 }
 
-// GetDepartmentByIDController retrieves a single department with access verification
 func (cl *DepartmentController) GetDepartmentByIDController(c fiber.Ctx) error {
-	// 1. Extract authenticated user ID
+
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
-	// 2. Parse department ID parameter
 	idStr := c.Params("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		return helper.Error(c, 400, "invalid department id")
 	}
 
-	// 3. Check institution admin access authorization
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	checking_user_institution_id := cl.departmentService.GetInstitutionIDForUserService(uint(id))
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
-	}
-
-	// 4. Fetch department from service
-	department, err := cl.departmentService.GetDepartmentByIDService(
-		// userID,
-		uint(id),
-	)
-	if err != nil {
-		return helper.Error(c, 404, err.Error())
-	}
-
-	// 5. Return success response with department DTO
-	return helper.Success(
-		c,
-		"Department fetched successfully",
-		dto.ToDepartmentResponseDTO(&department),
-	)
-}
-
-// UpdateDepartmentController updates department details
-func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
-	// 1. Extract authenticated user ID
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok {
-		return helper.Error(c, 401, "Invalid user")
-	}
-
-	// 2. Parse department ID parameter
-	idStr := c.Params("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		return helper.Error(c, 400, "invalid department id")
-	}
-
-	// 3. Check institution admin access authorization
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.departmentService.GetInstitutionIDForUserService(uint(id))
@@ -173,7 +109,41 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
 
-	// 4. Bind and validate request body
+	department, err := cl.departmentService.GetDepartmentByIDService(
+
+		uint(id),
+	)
+	if err != nil {
+		return helper.Error(c, 404, err.Error())
+	}
+
+	return helper.Success(
+		c,
+		"Department fetched successfully",
+		dto.ToDepartmentResponseDTO(&department),
+	)
+}
+
+func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
+
+	userID, ok := c.Locals("user_id").(uint)
+	if !ok {
+		return helper.Error(c, 401, "Invalid user")
+	}
+
+	idStr := c.Params("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		return helper.Error(c, 400, "invalid department id")
+	}
+
+	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
+	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
+	checking_user_institution_id := cl.departmentService.GetInstitutionIDForUserService(uint(id))
+	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
+		return helper.Error(c, 403, "Cant able to access other institution")
+	}
+
 	var body dto.UpdateDepartmentDTO
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body")
@@ -184,7 +154,6 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 5. Update department in service
 	if err := cl.departmentService.UpdateDepartmentService(
 		userID,
 		uint(id),
@@ -193,16 +162,14 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 6. Fetch updated record
 	updated, err := cl.departmentService.GetDepartmentByIDService(
-		// userID,
+
 		uint(id),
 	)
 	if err != nil {
 		return helper.Error(c, 500, err.Error())
 	}
 
-	// 7. Return success response
 	return helper.Success(
 		c,
 		"Department updated successfully",
@@ -210,38 +177,33 @@ func (cl *DepartmentController) UpdateDepartmentController(c fiber.Ctx) error {
 	)
 }
 
-// DeleteDepartmentController deletes (soft deletes) a department
 func (cl *DepartmentController) DeleteDepartmentController(c fiber.Ctx) error {
-	// 1. Extract authenticated user ID
+
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
 
-	// 2. Parse department ID parameter
 	idStr := c.Params("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
 		return helper.Error(c, 400, "invalid department id")
 	}
 
-	// 3. Check institution admin access authorization
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.departmentService.GetInstitutionIDForUserService(uint(id))
-	if is_inst_admin && (loginnedUserInstitutionID == 0 || checking_user_institution_id != loginnedUserInstitutionID) {
+	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
 	}
 
-	// 4. Delete department via service
 	if err := cl.departmentService.DeleteDepartment(
-		userID,
+
 		uint(id),
 	); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	// 5. Return success response
 	return helper.Success(
 		c,
 		"Department deleted successfully",

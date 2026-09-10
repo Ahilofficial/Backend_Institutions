@@ -3,7 +3,7 @@ package controller
 import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
-	
+
 	"backend_institutions/internal/services"
 	"strconv"
 	"strings"
@@ -21,7 +21,6 @@ func NewPaymentController(paymentService *services.PaymentService) *PaymentContr
 	}
 }
 
-// CreateDepartmentPaymentController handles institution admin configuring fee/payment for a department and semester
 func (cl *PaymentController) CreateDepartmentPaymentController(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {
@@ -33,10 +32,10 @@ func (cl *PaymentController) CreateDepartmentPaymentController(c fiber.Ctx) erro
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
-	
 
 	payment, err := cl.paymentService.CreateDepartmentPayment(userID, &body)
 	if err != nil {
@@ -50,7 +49,6 @@ func (cl *PaymentController) CreateDepartmentPaymentController(c fiber.Ctx) erro
 	return helper.Success(c, "Department payment configured successfully", dto.ToDepartmentPaymentResponseDTO(payment))
 }
 
-// UpdateDepartmentPaymentController handles updating amounts of a department payment configuration
 func (cl *PaymentController) UpdateDepartmentPaymentController(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {
@@ -68,6 +66,7 @@ func (cl *PaymentController) UpdateDepartmentPaymentController(c fiber.Ctx) erro
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
@@ -84,7 +83,6 @@ func (cl *PaymentController) UpdateDepartmentPaymentController(c fiber.Ctx) erro
 	return helper.Success(c, "Department payment updated successfully", dto.ToDepartmentPaymentResponseDTO(updated))
 }
 
-// DeleteDepartmentPaymentController handles soft deletion of a department payment configuration
 func (cl *PaymentController) DeleteDepartmentPaymentController(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {
@@ -108,7 +106,6 @@ func (cl *PaymentController) DeleteDepartmentPaymentController(c fiber.Ctx) erro
 	return helper.Success(c, "Department payment deleted successfully", nil)
 }
 
-// GetDepartmentPaymentBySemesterController retrieves payment config for a department and semester
 func (cl *PaymentController) GetDepartmentPaymentBySemesterController(c fiber.Ctx) error {
 	deptIDStr := c.Params("departmentId")
 	deptID, err := strconv.ParseUint(deptIDStr, 10, 32)
@@ -130,7 +127,6 @@ func (cl *PaymentController) GetDepartmentPaymentBySemesterController(c fiber.Ct
 	return helper.Success(c, "Department payment fetched successfully", dto.ToDepartmentPaymentResponseDTO(payment))
 }
 
-// GetDepartmentPaymentsController retrieves all payment configurations for a department
 func (cl *PaymentController) GetDepartmentPaymentsController(c fiber.Ctx) error {
 	deptIDStr := c.Params("departmentId")
 	deptID, err := strconv.ParseUint(deptIDStr, 10, 32)
@@ -146,7 +142,6 @@ func (cl *PaymentController) GetDepartmentPaymentsController(c fiber.Ctx) error 
 	return helper.Success(c, "Department payments fetched successfully", dto.ToDepartmentPaymentResponseListDTO(payments))
 }
 
-// CreateStudentPaymentController handles a student making payment towards their fees
 func (cl *PaymentController) CreateStudentPaymentController(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(uint)
 	if !ok || userID == 0 {

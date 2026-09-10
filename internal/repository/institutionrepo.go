@@ -91,6 +91,15 @@ func (r *InstitutionRepository) HasInstituteRepo(userID uint, id uint) (uint, er
 	return institutionID, nil
 }
 
+func(r *InstitutionRepository)ISInstCodeExisting(inscode string)(string,error){
+	var instexist string
+	err:=r.db.Raw("select institution_code from institutions where institution_code=?",inscode).Scan(&instexist).Error
+	if err!=nil{
+		return "",err
+	}
+	return  instexist,nil
+
+}
 func (r *InstitutionRepository) FetchInstitutionPaginated(page, limit int) ([]model.Institutions, int64, error) {
 	var insts []model.Institutions
 	var total int64

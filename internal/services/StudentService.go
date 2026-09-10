@@ -5,7 +5,6 @@ import (
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
 	"errors"
-
 )
 
 type StudentService struct {
@@ -51,25 +50,18 @@ func (s *StudentService) CreateStudentService(
 		)
 	}
 
-	// Get faculty
-	faculty, err := s.facultyRepo.FetchFacultyById(
-		createstudent.FacultyID,
-	)
+	faculty, err := s.facultyRepo.FetchFacultyById(createstudent.FacultyID)
 
 	if err != nil || faculty.ID == 0 {
 		return nil, errors.New("faculty not found")
 	}
 
-	// Get department from faculty
-	dept, err := s.departmentRepo.FetchDepartmentById(
-		faculty.DepartmentID,
-	)
+	dept, err := s.departmentRepo.FetchDepartmentById(faculty.DepartmentID)
 
 	if err != nil || dept.ID == 0 {
 		return nil, errors.New("department not found")
 	}
 
-	// Validate semester
 	if createstudent.Semester <= 0 ||
 		createstudent.Semester > dept.CourseDuration*2 {
 
@@ -78,20 +70,17 @@ func (s *StudentService) CreateStudentService(
 		)
 	}
 
-	// Check whether the student department and payment was already configured in department payment table
 	deptPayment, err := s.paymentRepo.GetDepartmentPaymentBySemester(dept.ID, createstudent.Semester)
 	if err != nil || deptPayment == nil || deptPayment.ID == 0 {
 		return nil, errors.New("you need to configure payment first")
 	}
 
-	// Calculate base fee amounts
 	collegeFee := deptPayment.CollegeAmount
 	hostelFee := 0.0
 	if createstudent.Hosteller {
 		hostelFee = deptPayment.HostelAmount
 	}
 
-	// Apply MQ and Scholarship adjustments
 	if createstudent.MQ {
 		collegeFee += collegeFee * 0.50
 		if createstudent.Hosteller {
@@ -106,30 +95,6 @@ func (s *StudentService) CreateStudentService(
 
 	totalFee := collegeFee + hostelFee
 
-	// Check whether student profile already exists for this user (upsert if exists)
-	existingStudentID, _ := s.userRepo.GetUserStudentID(userID)
-	if existingStudentID > 0 {
-		existingStudent, err := s.studentRepo.FetchStudentById(existingStudentID)
-		if err == nil && existingStudent.ID > 0 {
-			existingStudent.Name = createstudent.Name
-			existingStudent.Gender = createstudent.Gender
-			existingStudent.Hosteller = createstudent.Hosteller
-			existingStudent.MQ = createstudent.MQ
-			existingStudent.Scholarship = createstudent.Scholorship
-			existingStudent.Semester = createstudent.Semester
-			existingStudent.FacultyID = createstudent.FacultyID
-			existingStudent.DepartmentID = dept.ID
-			existingStudent.FeeAmount = totalFee
-			existingStudent.Pending = (existingStudent.PaidAmount < totalFee)
-
-			if err := s.studentRepo.UpdateStudentById(&existingStudent); err != nil {
-				return nil, err
-			}
-			return &existingStudent, nil
-		}
-	}
-
-	// Create new student profile
 	student := model.Student{
 		Name:         createstudent.Name,
 		Gender:       createstudent.Gender,
@@ -146,12 +111,10 @@ func (s *StudentService) CreateStudentService(
 		DepartmentID: dept.ID,
 	}
 
-	// Save student
 	if err := s.studentRepo.CreateStudent(&student); err != nil {
 		return nil, err
 	}
 
-	// Link student to user
 	if err := s.userRepo.UpdateUserStudentID(
 		userID,
 		student.ID,
@@ -161,10 +124,6 @@ func (s *StudentService) CreateStudentService(
 
 	return &student, nil
 }
-
-// 
-
-
 
 func (s *StudentService) FetchAllStudentsPaginatedServices(
 	search string,
@@ -184,8 +143,7 @@ func (s *StudentService) FetchAllStudentsPaginatedServicesScoped(
 	page int,
 	limit int,
 ) ([]model.Student, int64, error) {
-	
-	
+
 	return s.studentRepo.FetchStudentPaginated(search, page, limit)
 }
 
@@ -193,20 +151,15 @@ func (s *StudentService) GetUserStudentIDService(userID uint) (uint, error) {
 	return s.userRepo.GetUserStudentID(userID)
 }
 
-
 func (s *StudentService) GetStudentServiceById(
-	// userID uint,
+
 	id uint,
 ) (*model.Student, error) {
 
 	student, err := s.studentRepo.FetchStudentById(id)
-	return &student,err
-	
-}
+	return &student, err
 
-// func (s *StudentService) GetActiveStudentService() (model.Student, error) {
-// 	return s.studentRepo.GetActiveStudent()
-// }
+}
 
 func (s *StudentService) UpdateStudentService(
 	userID uint,
@@ -227,11 +180,10 @@ func (s *StudentService) UpdateStudentService(
 	if userFacultyID > 0 && student.FacultyID != userFacultyID {
 		return nil, errors.New("access denied: student does not belong to your faculty")
 	}
-	
 
 	student.Name = req.Name
 	student.Gender = req.Gender
-	student.Semester=req.Semester
+	student.Semester = req.Semester
 
 	if err := s.studentRepo.UpdateStudentById(&student); err != nil {
 		return nil, err
@@ -260,7 +212,6 @@ func (s *StudentService) DeleteStudentService(
 	return s.studentRepo.DeleteStudent(id)
 }
 
-
 func (s *StudentService) UpdateStudentSemesterControllerService(userID uint, id uint, dto *dto.UpdateSemesterDTO) (*model.Student, error) {
 	student, err := s.studentRepo.FetchStudentById(id)
 	if err != nil || student.ID == 0 {
@@ -276,7 +227,6 @@ func (s *StudentService) UpdateStudentSemesterControllerService(userID uint, id 
 		return nil, errors.New("semester exceeds course duration")
 	}
 
-	// Check whether payment is configured for new semester
 	deptPayment, err := s.paymentRepo.GetDepartmentPaymentBySemester(student.DepartmentID, dto.Semester)
 	if err != nil || deptPayment == nil || deptPayment.ID == 0 {
 		return nil, errors.New("you need to configure payment first")
@@ -311,4 +261,3 @@ func (s *StudentService) UpdateStudentSemesterControllerService(userID uint, id 
 
 	return &student, nil
 }
-

@@ -15,6 +15,8 @@ type CreateDepartmentPaymentDTO struct {
 	Semester      uint    `json:"semester"`
 }
 
+func (dto *CreateDepartmentPaymentDTO) Sanitize() {}
+
 func (dto *CreateDepartmentPaymentDTO) Validate() error {
 	if dto.DepartmentID == 0 {
 		return errors.New("department_id is required")
@@ -38,6 +40,8 @@ type UpdateDepartmentPaymentDTO struct {
 	CollegeAmount float64 `json:"college_amount"`
 	HostelAmount  float64 `json:"hostel_amount"`
 }
+
+func (dto *UpdateDepartmentPaymentDTO) Sanitize() {}
 
 func (dto *UpdateDepartmentPaymentDTO) Validate() error {
 	if dto.CollegeAmount < 0 || dto.HostelAmount < 0 {

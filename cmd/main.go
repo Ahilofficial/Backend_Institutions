@@ -7,12 +7,18 @@ import (
 
 	"backend_institutions/internal/seeds"
 	"backend_institutions/internal/wire"
-	"github.com/joho/godotenv"
 	"log"
 	"os"
+
+	// "github.com/gofiber/fiber/v3/client"
+	"github.com/joho/godotenv"
 )
 
+
+    
+
 func main() {
+	// request:=client.Request
 	err := godotenv.Load()
 	if err != nil {
 		err = godotenv.Load("../.env")
@@ -41,9 +47,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-
-
+	
 
 	seeds.RunSeeders()
 

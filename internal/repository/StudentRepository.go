@@ -18,30 +18,25 @@ func NewStudentRepository(db *gorm.DB) *StudentRepository {
 	}
 }
 
-
-
-func(r *StudentRepository)GetStudentDepartment(userID uint)(model.Department,error){
+func (r *StudentRepository) GetStudentDepartment(userID uint) (model.Department, error) {
 	var department model.Department
-	
-	err:=r.db.Raw(`select * from department where user_id=?`,userID).Scan(&department).Error
-	if err!=nil{
-		return model.Department{},err
+
+	err := r.db.Raw(`select * from department where user_id=?`, userID).Scan(&department).Error
+	if err != nil {
+		return model.Department{}, err
 	}
-	return department,nil
+	return department, nil
 }
 
 func (r *StudentRepository) CreateStudent(
 	student *model.Student,
 ) error {
-	
+
 	if err := r.db.Create(student).Error; err != nil {
 		return err
 	}
 	return nil
 }
-
-
-
 
 func (r *StudentRepository) FetchByUserID(userID uint) (model.Student, error) {
 	var stud model.Student
@@ -91,21 +86,6 @@ func (r *StudentRepository) FetchStudentPaginated(
 		Model(&model.Student{}).
 		Where("students.deleted_at IS NULL")
 
-	if search != "" {
-
-		searchPattern := "%" + search + "%"
-
-		query = query.Where(`
-			(
-				students.name LIKE ?
-				OR students.gender LIKE ?
-			)
-		`,
-			searchPattern,
-			searchPattern,
-		)
-	}
-
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -154,40 +134,6 @@ func (r *StudentRepository) GetInstitutionIDForUserRepo(studentID uint) uint {
 	}
 	return student.Faculty.Department.InstitutionID
 }
-
-func (r *StudentRepository) FetchStudentDeleted() ([]model.Student, error) {
-
-	var students []model.Student
-
-	err := r.db.
-		Unscoped().
-		Where("deleted_at IS NOT NULL").
-		Find(&students).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return students, nil
-}
-
-func (r *StudentRepository) GetActiveStudent() (model.Student, error) {
-
-	var student model.Student
-
-	err := r.db.
-		Where("is_active = ? AND deleted_at IS NULL", true).
-		Preload("Faculty").
-		First(&student).Error
-
-	if err != nil {
-		return model.Student{}, err
-	}
-
-	return student, nil
-}
-
-
 
 func (r *StudentRepository) DeleteStudent(id uint) error {
 
@@ -393,21 +339,6 @@ func (r *StudentRepository) FetchStudentPaginatedWithInstitution(
 	return students, total, nil
 }
 
-func (r *StudentRepository) GetStudentVerificationAccess(
-	studentID uint,
-	facultyID uint,
-	access *model.StudentVerificationAccess,
-) error {
-	var student model.Student
-	err := r.db.Where("id = ? AND faculty_id = ? AND deleted_at IS NULL", studentID, facultyID).First(&student).Error
-	if err != nil {
-		return err
-	}
-	access.StudentID = student.ID
-	access.FacultyID = student.FacultyID
-	return nil
-}
-
 func (r *StudentRepository) UpdateStudentVerified(
 	userID uint,
 ) error {
@@ -436,9 +367,6 @@ func (r *StudentRepository) GetInstitutionByStudentID(studentID uint) (uint, err
 	return r.GetInstitutionIDByStudent(studentID)
 }
 
-
-
-// FetchStudentsByDepartmentAndSemester retrieves all active students in a department and semester
 func (r *StudentRepository) FetchStudentsByDepartmentAndSemester(departmentID uint, semester uint) ([]model.Student, error) {
 	var students []model.Student
 	err := r.db.Where("department_id = ? AND semester = ? AND is_active = true AND deleted_at IS NULL", departmentID, semester).Find(&students).Error

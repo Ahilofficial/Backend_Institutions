@@ -4,9 +4,11 @@ import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
 	"backend_institutions/internal/services"
+	
 	"strconv"
 
 	"github.com/gofiber/fiber/v3"
+	
 )
 
 type RoleController struct {
@@ -352,11 +354,12 @@ func (cl *RoleController) FetchRolePermissionsController(c fiber.Ctx) error {
 	if err != nil || page < 1 {
 		page = 1
 	}
-
+   
 	limit, err := strconv.Atoi(c.Query("limit"))
 	if err != nil || limit < 1 {
 		limit = 10
 	}
+	
 
 	rolePerms, total, err := cl.roleService.FetchRolePermissions(page, limit)
 	if err != nil {

@@ -68,17 +68,17 @@ func (cl *UserController) SignUpController(c fiber.Ctx) error {
 
 func (cl *UserController) SignInController(c fiber.Ctx) error {
 	var body dto.SignInDTO
-	body.Sanitize()
-
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "invalid request body: "+err.Error())
 	}
 
+	body.Sanitize()
 	if err := body.Validate(); err != nil {
 		return helper.Error(c, 400, err.Error())
 	}
 
-	accessToken, refreshToken, user_id, session_id, role, err := cl.userService.SignIn(&body, c)
+	userAgent := c.Get("User-Agent")
+	accessToken, refreshToken, user_id, session_id, role, err := cl.userService.SignIn(&body, userAgent)
 	if err != nil {
 		return helper.Error(c, 401, err.Error())
 	}

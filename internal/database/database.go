@@ -32,12 +32,9 @@ func Connect() {
 		log.Fatalf("cant connect to the database: %v", err)
 	}
 
-	
-
 	DB = db
 	log.Print("Connected to the database successfully")
 }
-
 
 func NewDB() *gorm.DB {
 	if DB == nil {

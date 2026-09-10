@@ -7,7 +7,6 @@ import (
 	"errors"
 )
 
-// FacultyService provides business logic operations for faculty entities
 type FacultyService struct {
 	facultyRepo    *repository.FacultyRepository
 	departmentRepo *repository.DepartmentRepository
@@ -15,7 +14,6 @@ type FacultyService struct {
 	instituteRepo  *repository.InstitutionRepository
 }
 
-// NewFacultyService creates a new instance of FacultyService with required repositories
 func NewFacultyService(
 	facultyRepo *repository.FacultyRepository,
 	departmentRepo *repository.DepartmentRepository,
@@ -30,7 +28,10 @@ func NewFacultyService(
 	}
 }
 
-// GetFacultyIDForUserService resolves the faculty ID linked to a user account
+
+
+
+
 func (s *FacultyService) GetFacultyIDForUserService(
 	userID uint,
 ) (uint, error) {
@@ -38,7 +39,7 @@ func (s *FacultyService) GetFacultyIDForUserService(
 	if err == nil && facultyID > 0 {
 		return facultyID, nil
 	}
-
+    
 	faculty, err := s.facultyRepo.FetchByUserID(userID)
 	if err == nil && faculty.ID > 0 {
 		return faculty.ID, nil
@@ -47,44 +48,36 @@ func (s *FacultyService) GetFacultyIDForUserService(
 	return 0, errors.New("faculty profile not found for this user")
 }
 
-
-// CreateFacultyService validates requirements and registers a new faculty profile
 func (s *FacultyService) CreateFacultyService(
 	userID uint,
 	body *dto.CreateFacultyDTO,
 ) (model.Faculty, error) {
 
-	// 1. Check department existence and validity
 	department, err := s.departmentRepo.FetchDepartmentById(body.DepartmentID)
 	if err != nil || department.ID == 0 {
 		return model.Faculty{}, errors.New("department not found")
 	}
-
-	// 2. Check whether user already has Student or Faculty profile
+   // for particular faculty already any data stored in user table
 	profileExists, message := s.userRepo.CheckUserExistingProfileFaculty(userID)
 	if profileExists {
 		return model.Faculty{}, errors.New(message)
 	}
 
-	// 3. Get department's institution ID
 	departmentInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(body.DepartmentID)
 	if err != nil || departmentInstitutionID == 0 {
 		return model.Faculty{}, errors.New("institution not found for this department")
 	}
 
-	// 4. Get logged-in user's institution ID
 	loggedInUserInstitutionID := s.facultyRepo.LoginnedUserInstitutionIDRepo(userID)
 
-	// 5. Check institution access authorization
 	isInstAdmin := s.instituteRepo.IsInstAdminRepo(userID)
-	
-	if isInstAdmin{
-		if loggedInUserInstitutionID!=departmentInstitutionID{
-			return model.Faculty{},errors.New("you can create faculty only for your institution")
+
+	if isInstAdmin {
+		if loggedInUserInstitutionID != departmentInstitutionID {
+			return model.Faculty{}, errors.New("you can create faculty only for your institution")
 		}
 	}
 
-	// 6. Assemble faculty model
 	faculty := model.Faculty{
 		Name:         body.Name,
 		Gender:       body.Gender,
@@ -94,7 +87,6 @@ func (s *FacultyService) CreateFacultyService(
 		IsActive:     true,
 	}
 
-	// 7. Save faculty record to database
 	if err := s.facultyRepo.CreateFaculty(&faculty); err != nil {
 		return model.Faculty{}, err
 	}
@@ -102,12 +94,10 @@ func (s *FacultyService) CreateFacultyService(
 	return faculty, nil
 }
 
-// GetFacultyService fetches all active faculty records
 func (s *FacultyService) GetFacultyService() ([]model.Faculty, error) {
 	return s.facultyRepo.FetchFaculty()
 }
 
-// GetFacultyServicePaginated fetches faculty records with pagination support
 func (s *FacultyService) GetFacultyServicePaginated(
 	page int,
 	limit int,
@@ -118,12 +108,8 @@ func (s *FacultyService) GetFacultyServicePaginated(
 	)
 }
 
-// GetFacultyServiceById fetches a single faculty record by ID
-func (s *FacultyService) GetFacultyServiceById(
-	userID uint,
-	id uint,
-) (*model.Faculty, error) {
-	// 1. Fetch faculty from repository
+func (s *FacultyService) GetFacultyServiceById(userID uint,id uint,) (*model.Faculty, error) {
+
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return nil, err
@@ -132,35 +118,29 @@ func (s *FacultyService) GetFacultyServiceById(
 	return &faculty, nil
 }
 
-// GetInstitutionIDForUserRepo retrieves institution ID associated with a faculty ID
 func (s *FacultyService) GetInstitutionIDForUserRepo(facultyID uint) uint {
 	return s.facultyRepo.GetInstitutionIDForUserRepo(facultyID)
 }
 
-// GetInstitutionByDepartmentID retrieves institution ID associated with a department ID
 func (s *FacultyService) GetInstitutionByDepartmentID(deptID uint) (uint, error) {
 	return s.departmentRepo.GetInstitutionByDepartmentID(deptID)
 }
 
-// LoginnedUserInstitutionIDService retrieves institution ID associated with the logged-in user
 func (s *FacultyService) LoginnedUserInstitutionIDService(userID uint) uint {
 	logginedUserInstitutionID := s.facultyRepo.LoginnedUserInstitutionIDRepo(userID)
 	return logginedUserInstitutionID
 }
 
-// GetLoggedInFacultyProfile fetches the faculty profile belonging to the authenticated user
 func (s *FacultyService) GetLoggedInFacultyProfile(userID uint) (*model.Faculty, error) {
-	// 1. Retrieve faculty ID linked to user
+
 	facultyID, err := s.userRepo.GetUserFacultyID(userID)
 	if err != nil || facultyID == 0 {
 		return nil, errors.New("faculty profile not created yet for logged in user")
 	}
 
-	// 2. Fetch full faculty profile details
 	return s.GetFacultyServiceById(userID, facultyID)
 }
 
-// GetLoggedInFacultyStudents fetches all students assigned to the logged-in faculty member
 func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Student, error) {
 	facultyID, err := s.GetFacultyIDForUserService(userID)
 	if err != nil || facultyID == 0 {
@@ -170,7 +150,6 @@ func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Studen
 	return s.facultyRepo.FetchStudentsByFacultyID(facultyID)
 }
 
-// GetPaidStudentsForFacultyService fetches all paid students assigned to the logged-in faculty member
 func (s *FacultyService) GetPaidStudentsForFacultyService(userID uint) ([]model.Student, error) {
 	facultyID, err := s.GetFacultyIDForUserService(userID)
 	if err != nil || facultyID == 0 {
@@ -180,7 +159,6 @@ func (s *FacultyService) GetPaidStudentsForFacultyService(userID uint) ([]model.
 	return s.facultyRepo.FetchPaidStudentsByFacultyID(facultyID)
 }
 
-// GetNonPaidStudentsForFacultyService fetches all non-paid (pending) students assigned to the logged-in faculty member
 func (s *FacultyService) GetNonPaidStudentsForFacultyService(userID uint) ([]model.Student, error) {
 	facultyID, err := s.GetFacultyIDForUserService(userID)
 	if err != nil || facultyID == 0 {
@@ -190,47 +168,40 @@ func (s *FacultyService) GetNonPaidStudentsForFacultyService(userID uint) ([]mod
 	return s.facultyRepo.FetchNonPaidStudentsByFacultyID(facultyID)
 }
 
-
-// DeleteFacultyService handles soft deletion of a faculty record
 func (s *FacultyService) DeleteFacultyService(
 	userID uint,
 	id uint,
 ) error {
-	// 1. Fetch faculty record to verify existence
+
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
 	}
 
-	// 2. Check if logged-in user is attempting to delete their own faculty profile
 	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
 	if faculty.ID != userFacultyID {
 		return errors.New("you cant able to delete other faculty")
 	}
 
-	// 3. Delete faculty record
 	return s.facultyRepo.DeleteFaculty(id)
 }
 
-// UpdateFacultyService validates authorization and updates faculty profile fields
 func (s *FacultyService) UpdateFacultyService(
 	userID uint,
 	id uint,
 	req *dto.UpdateFacultyDTO,
 ) error {
-	// 1. Fetch existing faculty record
+
 	faculty, err := s.facultyRepo.FetchFacultyById(id)
 	if err != nil {
 		return err
 	}
 
-	// 2. Verify faculty ownership
 	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
 	if userFacultyID != id {
 		return errors.New("access denied: you can only update your own faculty profile")
 	}
 
-	// 3. Verify institution match
 	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
 	if err != nil {
 		return err
@@ -240,8 +211,10 @@ func (s *FacultyService) UpdateFacultyService(
 		return errors.New("access denied: you can only update your own faculty profile")
 	}
 
-	// 4. Update faculty profile fields
 	faculty.Name = req.Name
 	faculty.Gender = req.Gender
 	return s.facultyRepo.UpdateFacultyById(&faculty)
 }
+
+
+func(s *FacultyService)CheckFacultyInstitutionAccessService(userID uint, facultyID uint)

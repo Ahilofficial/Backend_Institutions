@@ -211,21 +211,6 @@
           }
         },
         {
-          "name": "Get User Menus",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/menus",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "menus"
-              ]
-            }
-          }
-        },
-        {
           "name": "Forgot Password",
           "request": {
             "auth": {

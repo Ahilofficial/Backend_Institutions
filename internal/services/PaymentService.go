@@ -29,7 +29,6 @@ func NewPaymentService(
 	}
 }
 
-// checkInstitutionAdminAccess ensures the user is an institution admin and that the department belongs to their institution
 func (s *PaymentService) checkInstitutionAdminAccess(userID uint, departmentID uint) error {
 	if userID == 0 {
 		return errors.New("unauthorized user")
@@ -57,17 +56,15 @@ func (s *PaymentService) checkInstitutionAdminAccess(userID uint, departmentID u
 	return nil
 }
 
-// CreateDepartmentPayment configures a base fee/payment structure for a department and semester
 func (s *PaymentService) CreateDepartmentPayment(
 	userID uint,
 	req *dto.CreateDepartmentPaymentDTO,
 ) (*model.DepartmentPayment, error) {
-	// 1. Authorize institution admin for department's institution
+
 	if err := s.checkInstitutionAdminAccess(userID, req.DepartmentID); err != nil {
 		return nil, err
 	}
 
-	// 2. Check for duplicate configuration
 	existing, _ := s.paymentRepo.GetDepartmentPaymentBySemester(req.DepartmentID, req.Semester)
 	if existing != nil && existing.ID > 0 {
 		return nil, fmt.Errorf("payment already configured for department %d and semester %d", req.DepartmentID, req.Semester)
@@ -90,7 +87,6 @@ func (s *PaymentService) CreateDepartmentPayment(
 	return &payment, nil
 }
 
-// UpdateDepartmentPayment updates amount configurations for a department payment
 func (s *PaymentService) UpdateDepartmentPayment(
 	userID uint,
 	id uint,
@@ -116,7 +112,6 @@ func (s *PaymentService) UpdateDepartmentPayment(
 	return payment, nil
 }
 
-// DeleteDepartmentPayment soft deletes a department payment configuration
 func (s *PaymentService) DeleteDepartmentPayment(userID uint, id uint) error {
 	payment, err := s.paymentRepo.GetDepartmentPaymentByID(id)
 	if err != nil || payment == nil || payment.ID == 0 {
@@ -130,23 +125,20 @@ func (s *PaymentService) DeleteDepartmentPayment(userID uint, id uint) error {
 	return s.paymentRepo.DeleteDepartmentPayment(id)
 }
 
-// GetDepartmentPaymentBySemester retrieves payment configuration for a specific department and semester
 func (s *PaymentService) GetDepartmentPaymentBySemester(deptID uint, semester uint) (*model.DepartmentPayment, error) {
 	return s.paymentRepo.GetDepartmentPaymentBySemester(deptID, semester)
 }
 
-// GetDepartmentPayments retrieves all semester payment configs for a department
 func (s *PaymentService) GetDepartmentPayments(deptID uint) ([]model.DepartmentPayment, error) {
 	return s.paymentRepo.GetDepartmentPaymentsByDeptID(deptID)
 }
 
-// MakeStudentPayment processes a payment made by a student
 func (s *PaymentService) MakeStudentPayment(
 	userID uint,
 	req *dto.CreateStudentPaymentDTO,
-	
+
 ) (*model.StudentPayment, *model.Student, error) {
-	// 1. Verify that signed-in student can only pay for their own student profile
+
 	loggedInStudentID, _ := s.userRepo.GetUserStudentID(userID)
 	if req.StudentID == 0 && loggedInStudentID > 0 {
 		req.StudentID = loggedInStudentID
@@ -155,18 +147,15 @@ func (s *PaymentService) MakeStudentPayment(
 		return nil, nil, errors.New("cant able to make payment for other student")
 	}
 
-	// 2. Fetch student details
 	student, err := s.paymentRepo.GetStudentByID(req.StudentID)
 	if err != nil || student == nil || student.ID == 0 {
 		return nil, nil, errors.New("student not found")
 	}
 
-	// 3. Verify fee amount is assigned
 	if student.FeeAmount <= 0 {
 		return nil, nil, errors.New("no fee is assigned to this student")
 	}
 
-	// 4. Check remaining pending balance
 	pendingAmount := student.FeeAmount - student.PaidAmount
 	if pendingAmount <= 0 || !student.Pending {
 		return nil, nil, errors.New("fees already fully paid for this student")
@@ -176,7 +165,6 @@ func (s *PaymentService) MakeStudentPayment(
 		return nil, nil, errors.New("you need to pay all the fees")
 	}
 
-	// 5. Create payment transaction record
 	paymentTx := model.StudentPayment{
 		StudentID:           student.ID,
 		DepartmentPaymentID: req.FeeID,
@@ -188,7 +176,6 @@ func (s *PaymentService) MakeStudentPayment(
 		return nil, nil, fmt.Errorf("failed to process payment: %w", err)
 	}
 
-	// 6. Update student paid amount and toggle pending status
 	student.PaidAmount += req.AmountPaid
 	if student.PaidAmount >= student.FeeAmount {
 		student.Pending = false

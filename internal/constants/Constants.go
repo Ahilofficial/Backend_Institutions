@@ -20,18 +20,18 @@ const (
 	PermissionDeleteFaculties = "DELETE_FACULTY"
 	PermissionViewIDFaculties = "VIEW_FACULTY_ID"
 
-	PermissionCreateStudents = "CREATE_STUDENT"
-	PermissionViewStudents   = "VIEW_STUDENTS"
-	PermissionUpdateStudents = "UPDATE_STUDENT"
-	PermissionDeleteStudents = "DELETE_STUDENT"
-	PermissionViewStudentsID = "VIEW_STUDENT_ID"
+	PermissionCreateStudents    = "CREATE_STUDENT"
+	PermissionViewStudents      = "VIEW_STUDENTS"
+	PermissionUpdateStudents    = "UPDATE_STUDENT"
+	PermissionDeleteStudents    = "DELETE_STUDENT"
+	PermissionViewStudentsID    = "VIEW_STUDENT_ID"
 	PermissionPromoteStudent    = "PROMOTE_STUDENT"
 	PermissionManageInstitution = "institution.manage"
-	StudentPayments = "StudentPayments"
+	StudentPayments             = "StudentPayments"
 
 	PermissionAssignRoles         = "ASSIGN_ROLE"
 	PermissionFacultyViewStudents = "PermissionFacultyViewStudents"
-	PaymentCreation= "PaymentCreation"
+	PaymentCreation               = "PaymentCreation"
 )
 
 var AllPermissions = []string{
