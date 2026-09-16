@@ -54,7 +54,7 @@ func (s *FacultyService) CreateFacultyService(
 	if err != nil || department.ID == 0 {
 		return model.Faculty{}, errors.New("department not found")
 	}
-   // for particular faculty already any data stored in user table
+
 	profileExists, message := s.userRepo.CheckUserExistingProfileFaculty(userID)
 	if profileExists {
 		return model.Faculty{}, errors.New(message)
@@ -176,10 +176,12 @@ func (s *FacultyService) DeleteFacultyService(
 	}
 
 	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	isSuperAdmin:=s.userRepo.IsSuperAdminRepo(userID )
+	if !isSuperAdmin{
 	if faculty.ID != userFacultyID {
 		return errors.New("you cant able to delete other faculty")
 	}
-
+}
 	return s.facultyRepo.DeleteFaculty(id)
 }
 
@@ -195,9 +197,13 @@ func (s *FacultyService) UpdateFacultyService(
 	}
 
 	userFacultyID, _ := s.userRepo.GetUserFacultyID(userID)
+	isSuperAdmin:=s.userRepo.IsSuperAdminRepo(userID )
+
+	if (!isSuperAdmin){
 	if userFacultyID != id {
 		return errors.New("access denied: you can only update your own faculty profile")
 	}
+}
 
 	facultyInstitutionID, err := s.departmentRepo.GetInstitutionByDepartmentID(faculty.DepartmentID)
 	if err != nil {

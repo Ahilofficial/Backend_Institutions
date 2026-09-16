@@ -28,12 +28,19 @@ func (r *UserRepository) UpdateFacultyID(userID uint, facultyID uint) error {
 func (r *UserRepository) GetUserByID(userID uint) (*model.User, error) {
 	var user model.User
 
-	result := r.db.
-		Where("id = ?", userID).
-		First(&user)
+	result := r.db.Raw(`
+		SELECT *
+		FROM users
+		WHERE id = ?
+		LIMIT 1
+	`, userID).Scan(&user)
 
 	if result.Error != nil {
 		return nil, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	return &user, nil
@@ -113,68 +120,12 @@ func (r *UserRepository) GetUserRoles(userID uint) ([]string, error) {
 	return roles, nil
 }
 
-// func (r *UserRepository) IsInstitutionAdmin(userID uint) (bool, uint, error) {
-// 	if userID == 0 {
-// 		return false, 0, nil
-// 	}
-
-// 	var institutionID uint
-// 	_ = r.db.Table("institution_admins").Where("user_id = ?", userID).Select("institution_id").Scan(&institutionID).Error
-// 	if institutionID > 0 {
-// 		return true, institutionID, nil
-// 	}
-
-// 	roles, err := r.GetUserRoles(userID)
-// 	if err == nil {
-// 		for _, role := range roles {
-// 			if role == "institution admin" || role == "institution_admin" || role == "inst_admin" || role == "institutionadmin" {
-// 				return true, 0, nil
-// 			}
-// 		}
-// 	}
-
-// 	return false, 0, nil
-// }
-
-// func (r *UserRepository) HasInstitutionAccess(userID uint, institutionID uint) (bool, error) {
-// 	if userID == 0 {
-// 		return false, errors.New("invalid user id")
-// 	}
-
-// 	roles, err := r.GetUserRoles(userID)
-// 	if err == nil {
-// 		for _, role := range roles {
-// 			if role == "super admin" || role == "super_admin" || role == "superadmin" {
-// 				return true, nil
-// 			}
-// 		}
-// 	}
-
-// 	isInstAdmin, assignedInstID, _ := r.IsInstitutionAdmin(userID)
-// 	if isInstAdmin {
-// 		if assignedInstID > 0 {
-// 			return assignedInstID == institutionID, nil
-// 		}
-// 		var count int64
-// 		_ = r.db.Table("institution_admins").Where("user_id = ? AND institution_id = ?", userID, institutionID).Count(&count).Error
-// 		if count > 0 {
-// 			return true, nil
-// 		}
-// 	}
-
-// 	userInstID, err := r.GetUserInstitutionID(userID)
-// 	if err == nil && userInstID > 0 {
-// 		return userInstID == institutionID, nil
-// 	}
-
-// 	return false, nil
-// }
-
 func (r *UserRepository) UpdateStudentID(userID uint, studentID uint) error {
-	result := r.db.
-		Model(&model.User{}).
-		Where("id = ?", userID).
-		Update("student_id", studentID)
+	result := r.db.Exec(`
+		UPDATE users
+		SET student_id = ?
+		WHERE id = ?
+	`, studentID, userID)
 
 	if result.Error != nil {
 		return result.Error
@@ -539,26 +490,7 @@ func (r *UserRepository) GetUserFacultyID(userID uint) (uint, error) {
 	err := r.db.Raw(`
 		SELECT faculty_id
 		FROM users
-		WHERE id = ?  / /_  / / __ \/ _ \/ ___/
- / __/ / / /_/ /  __/ /
-/_/   /_/_.___/\___/_/          v3.4.0
---------------------------------------------------
-INFO Server started on:         http://127.0.0.1:8090 (bound on host 0.0.0.0 and port 8090)
-INFO Total handlers:            150
-INFO Prefork:                   Disabled
-INFO PID:                       3962
-INFO Total process count:       1
-
-
-2026/09/10 10:49:13 /home/ahil/Backend_Institutions/internal/repository/Userrepo.go:674 Error 1054 (42S22): Unknown column 'r.role_name' in 'field list'
-[0.086ms] [rows:-] 
-                SELECT r.role_name
-                FROM user_roles ur
-                JOIN roles r ON r.role_id = ur.role_id
-                WHERE ur.user_id = 2
-                LIMIT 1
-
-2026/09/10 10:49:13 Error sending request/response log to gRPC service: rpc error: code = Unavailable desc = connection error: desc = "trans
+		WHERE id = ?
 		  AND deleted_at IS NULL
 		LIMIT 1
 	`, userID).Scan(&facultyID).Error
@@ -573,6 +505,7 @@ INFO Total process count:       1
 
 	return *facultyID, nil
 }
+
 func (r *UserRepository) GetUserStudentID(userID uint) (uint, error) {
 	if userID == 0 {
 		return 0, nil
@@ -702,4 +635,21 @@ func (r *UserRepository) IsSuperAdminRepo(userID uint) bool {
 	}
 
 	return roleName == "super_admin"
+}
+
+func(r *UserRepository)IsSuperAdmin(userID uint)(bool,error){
+	var user_role uint
+	err:=r.db.Raw(`select role_id from user_role where user_id=?`,userID).Scan(&user_role).Error
+	if err!=nil{
+		return false,err
+	}
+	var role_name string
+	role_err:=r.db.Raw(`select names from roles where id=?`,user_role).Scan(&role_name).Error
+	if role_err!=nil{
+		return false, role_err
+	}
+	if role_name!="super_admin"{
+		return false,nil
+	}
+	return true,nil
 }

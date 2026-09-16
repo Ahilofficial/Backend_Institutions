@@ -3,69 +3,60 @@ package grpc
 import (
 	"context"
 	"log"
-	"os"
+	"time"
 
-	"backend_institutions/internal/loggerpb"
+	"backend_institutions/internal/grpc/loggerpb"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
+	LoggerConn   *grpc.ClientConn
 	LoggerClient loggerpb.LoggerServiceClient
-	Conn         *grpc.ClientConn
 )
 
 func ConnectLogger() error {
-	host := os.Getenv("LOGGER_GRPC_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := os.Getenv("LOGGER_GRPC_PORT")
-	if port == "" {
-		port = "15051"
-	}
 
 	conn, err := grpc.NewClient(
-		host+":"+port,
+		"localhost:15051",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return err
 	}
 
-	Conn = conn
+	LoggerConn = conn
 	LoggerClient = loggerpb.NewLoggerServiceClient(conn)
 
-	log.Printf("Connected to Logger Service on port %s\n", port)
+	log.Println("Logger gRPC client connected on :15051")
 
 	return nil
 }
 
-func SendLog(
-	service string,
-	method string,
-	endpoint string,
-	request string,
-	response string,
-	status int32,
-) error {
+func CloseLogger() {
 
-	_, err := LoggerClient.SaveLog(
-		context.Background(),
-		&loggerpb.LogRequest{
-			Service:  service,
-			Method:   method,
-			Endpoint: endpoint,
-			Request:  request,
-			Response: response,
-			Status:   status,
-		},
-	)
+	if LoggerConn != nil {
+		LoggerConn.Close()
+		log.Println("Logger gRPC connection closed")
+	}
+}
 
-	if err != nil {
-		return err
+func SendLog(req *loggerpb.LogRequest) {
+
+	if LoggerClient == nil {
+		return
 	}
 
-	return nil
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		2*time.Second,
+	)
+	defer cancel()
+
+	_, err := LoggerClient.LogRequestResponse(ctx, req)
+
+	if err != nil {
+		log.Println("Logger gRPC error:", err)
+	}
 }

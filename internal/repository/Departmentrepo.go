@@ -144,8 +144,24 @@ func (r *DepartmentRepository) UpdateDepartmentById(department *model.Department
 
 func (r *DepartmentRepository) GetDepartmentByID(departmentID uint) (model.Department, error) {
 	var dept model.Department
-	err := r.db.Where("id = ? AND deleted_at IS NULL", departmentID).First(&dept).Error
-	return dept, err
+
+	result := r.db.Raw(`
+		SELECT *
+		FROM departments
+		WHERE id = ?
+		  AND deleted_at IS NULL
+		LIMIT 1
+	`, departmentID).Scan(&dept)
+
+	if result.Error != nil {
+		return dept, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return dept, gorm.ErrRecordNotFound
+	}
+
+	return dept, nil
 }
 
 func (r *DepartmentRepository) GetInstitutionByDepartmentID(

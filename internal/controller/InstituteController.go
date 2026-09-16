@@ -20,7 +20,6 @@ func NewInstituteController(instituteService *services.InstituteService) *Instit
 }
 
 
-//for inserting ins data to database
 func (cl *InstituteController) CreateInstituteController(c fiber.Ctx) error {
 	fmt.Println(c.Request())
 

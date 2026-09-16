@@ -17,10 +17,6 @@ import (
 )
 
 func getBaseURL() string {
-	// baseURL := os.Getenv("APP_BASE_URL")
-	// if baseURL != "" {
-	// 	return baseURL
-	// }
 	port := os.Getenv("APP_PORT")
 	if port == "" {
 		port = "8090"

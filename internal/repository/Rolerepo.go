@@ -180,61 +180,126 @@ func (r *RoleRepository) FetchUserRoles(page, limit int) ([]map[string]any, int6
 	var results []map[string]any
 	var total int64
 
-	err := r.db.Table("user_roles").Count(&total).Error
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM user_roles
+	`).Scan(&total).Error
+
 	if err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * limit
 
+	// Get paginated records
 	err = r.db.Raw(`
-		SELECT ur.user_id, ur.role_id 
-		FROM user_roles ur
+		SELECT user_id, role_id
+		FROM user_roles
 		LIMIT ? OFFSET ?
 	`, limit, offset).Scan(&results).Error
 
-	return results, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return results, total, nil
 }
 
 func (r *RoleRepository) CreateUserRole(userID, roleID uint) error {
-	var userCount, roleCount int64
-	_ = r.db.Table("users").Where("id = ? AND deleted_at IS NULL", userID).Count(&userCount)
-	_ = r.db.Table("roles").Where("id = ? AND deleted_at IS NULL", roleID).Count(&roleCount)
+	var userCount int64
+	var roleCount int64
+
+	// Check user
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM users
+		WHERE id = ?
+		  AND deleted_at IS NULL
+	`, userID).Scan(&userCount).Error
+
+	if err != nil {
+		return err
+	}
+
 	if userCount == 0 {
 		return errors.New("user not found")
 	}
+
+	// Check role
+	err = r.db.Raw(`
+		SELECT COUNT(*)
+		FROM roles
+		WHERE id = ?
+		  AND deleted_at IS NULL
+	`, roleID).Scan(&roleCount).Error
+
+	if err != nil {
+		return err
+	}
+
 	if roleCount == 0 {
 		return errors.New("role not found")
 	}
 
-	return r.db.Exec("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", userID, roleID).Error
+	// Create user-role mapping
+	result := r.db.Exec(`
+		INSERT INTO user_roles (user_id, role_id)
+		VALUES (?, ?)
+	`, userID, roleID)
+
+	return result.Error
 }
 
 func (r *RoleRepository) GetUserRoleByID(userID, roleID uint) (map[string]any, error) {
-	var count int64
-	r.db.Table("user_roles").Where("user_id = ? AND role_id = ?", userID, roleID).Count(&count)
-	if count == 0 {
+	var result map[string]any
+
+	res := r.db.Raw(`
+		SELECT user_id, role_id
+		FROM user_roles
+		WHERE user_id = ?
+		  AND role_id = ?
+		LIMIT 1
+	`, userID, roleID).Scan(&result)
+
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	if res.RowsAffected == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	var result map[string]any
-	err := r.db.Raw(`
-		SELECT ur.user_id, ur.role_id 
-		FROM user_roles ur
-		WHERE ur.user_id = ? AND ur.role_id = ?
-		LIMIT 1
-	`, userID, roleID).Scan(&result).Error
-	return result, err
+	return result, nil
 }
 
 func (r *RoleRepository) UpdateUserRole(userID, roleID, newRoleID uint) error {
 	var roleCount int64
-	_ = r.db.Table("roles").Where("id = ? AND deleted_at IS NULL", newRoleID).Count(&roleCount)
+
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM roles
+		WHERE id = ?
+		  AND deleted_at IS NULL
+	`, newRoleID).Scan(&roleCount).Error
+
+	if err != nil {
+		return err
+	}
+
 	if roleCount == 0 {
 		return errors.New("new role not found")
 	}
 
-	return r.db.Exec("UPDATE user_roles SET role_id = ? WHERE user_id = ? AND role_id = ?", newRoleID, userID, roleID).Error
+
+	result := r.db.Exec(`
+		UPDATE user_roles
+		SET role_id = ?
+		WHERE user_id = ?
+		  AND role_id = ?
+	`, newRoleID, userID, roleID)
+
+	return result.Error
 }
 
 func (r *RoleRepository) DeleteUserRole(userID, roleID uint) error {
@@ -252,61 +317,127 @@ func (r *RoleRepository) FetchRolePermissions(page, limit int) ([]map[string]any
 	var results []map[string]any
 	var total int64
 
-	err := r.db.Table("role_permissions").Count(&total).Error
+	// Get total count
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM role_permissions
+	`).Scan(&total).Error
+
 	if err != nil {
 		return nil, 0, err
 	}
 
 	offset := (page - 1) * limit
 
+	// Get paginated role permissions
 	err = r.db.Raw(`
-		SELECT rp.role_id, rp.permission_id 
-		FROM role_permissions rp
+		SELECT role_id, permission_id
+		FROM role_permissions
 		LIMIT ? OFFSET ?
 	`, limit, offset).Scan(&results).Error
 
-	return results, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return results, total, nil
 }
 
 func (r *RoleRepository) CreateRolePermission(roleID, permissionID uint) error {
-	var roleCount, permCount int64
-	_ = r.db.Table("roles").Where("id = ? AND deleted_at IS NULL", roleID).Count(&roleCount)
-	_ = r.db.Table("permissions").Where("id = ? AND deleted_at IS NULL", permissionID).Count(&permCount)
+	var roleCount int64
+	var permCount int64
+
+	// Check role
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM roles
+		WHERE id = ?
+		  AND deleted_at IS NULL
+	`, roleID).Scan(&roleCount).Error
+
+	if err != nil {
+		return err
+	}
+
 	if roleCount == 0 {
 		return errors.New("role not found")
 	}
+
+	// Check permission
+	err = r.db.Raw(`
+		SELECT COUNT(*)
+		FROM permissions
+		WHERE id = ?
+		  AND deleted_at IS NULL
+	`, permissionID).Scan(&permCount).Error
+
+	if err != nil {
+		return err
+	}
+
 	if permCount == 0 {
 		return errors.New("permission not found")
 	}
 
-	return r.db.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", roleID, permissionID).Error
+	// Create role-permission mapping
+	result := r.db.Exec(`
+		INSERT INTO role_permissions (role_id, permission_id)
+		VALUES (?, ?)
+	`, roleID, permissionID)
+
+	return result.Error
 }
 
 func (r *RoleRepository) GetRolePermissionByID(roleID, permissionID uint) (map[string]any, error) {
-	var count int64
-	r.db.Table("role_permissions").Where("role_id = ? AND permission_id = ?", roleID, permissionID).Count(&count)
-	if count == 0 {
+	var result map[string]any
+
+	res := r.db.Raw(`
+		SELECT role_id, permission_id
+		FROM role_permissions
+		WHERE role_id = ?
+		  AND permission_id = ?
+		LIMIT 1
+	`, roleID, permissionID).Scan(&result)
+
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	if res.RowsAffected == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
 
-	var result map[string]any
-	err := r.db.Raw(`
-		SELECT rp.role_id, rp.permission_id 
-		FROM role_permissions rp
-		WHERE rp.role_id = ? AND rp.permission_id = ?
-		LIMIT 1
-	`, roleID, permissionID).Scan(&result).Error
-	return result, err
+	return result, nil
 }
 
 func (r *RoleRepository) UpdateRolePermission(roleID, permissionID, newPermissionID uint) error {
 	var permCount int64
-	_ = r.db.Table("permissions").Where("id = ? AND deleted_at IS NULL", newPermissionID).Count(&permCount)
+
+	// Check if new permission exists
+	err := r.db.Raw(`
+		SELECT COUNT(*)
+		FROM permissions
+		WHERE id = ?
+		  AND deleted_at IS NULL
+	`, newPermissionID).Scan(&permCount).Error
+
+	if err != nil {
+		return err
+	}
+
 	if permCount == 0 {
 		return errors.New("new permission not found")
 	}
 
-	return r.db.Exec("UPDATE role_permissions SET permission_id = ? WHERE role_id = ? AND permission_id = ?", newPermissionID, roleID, permissionID).Error
+	// Update role permission
+	result := r.db.Exec(`
+		UPDATE role_permissions
+		SET permission_id = ?
+		WHERE role_id = ?
+		  AND permission_id = ?
+	`, newPermissionID, roleID, permissionID)
+
+	return result.Error
 }
 
 func (r *RoleRepository) DeleteRolePermission(roleID, permissionID uint) error {
@@ -373,21 +504,24 @@ func (r *RoleRepository) FetchAllRolesPermissions() ([]dto.RolesDTOResponse, err
 	return response, nil
 }
 
-func (r *RoleRepository) GetRoleByName(
-	roleName string,
-) (model.Role, error) {
-
+func (r *RoleRepository) GetRoleByName(roleName string) (model.Role, error) {
 	var role model.Role
 
 	roleName = strings.TrimSpace(roleName)
 
-	err := r.db.
-		Where("LOWER(name) = LOWER(?)", roleName).
-		First(&role).
-		Error
+	result := r.db.Raw(`
+		SELECT *
+		FROM roles
+		WHERE LOWER(name) = LOWER(?)
+		LIMIT 1
+	`, roleName).Scan(&role)
 
-	if err != nil {
-		return model.Role{}, err
+	if result.Error != nil {
+		return model.Role{}, result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return model.Role{}, gorm.ErrRecordNotFound
 	}
 
 	return role, nil

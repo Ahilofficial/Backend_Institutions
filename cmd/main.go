@@ -10,15 +10,10 @@ import (
 	"log"
 	"os"
 
-	// "github.com/gofiber/fiber/v3/client"
 	"github.com/joho/godotenv"
 )
 
-
-    
-
 func main() {
-	// request:=client.Request
 	err := godotenv.Load()
 	if err != nil {
 		err = godotenv.Load("../.env")
@@ -61,10 +56,11 @@ func main() {
 		port = "8090"
 	}
 	log.Printf("Server starting on :%s", port)
-	err = grpc.ConnectLogger()
-	if err != nil {
-		log.Fatal("Failed to connect to Logger Service:", err)
-	}
+	if err := grpc.ConnectLogger(); err != nil {
+	log.Println("Logger Server unavailable:", err)
+} else {
+	defer grpc.CloseLogger()
+}
 
 	err = grpc.ConnectService()
 	if err != nil {

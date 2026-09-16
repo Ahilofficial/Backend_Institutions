@@ -137,37 +137,57 @@ func (r *FacultyRepository) FetchFacultyById(id uint) (model.Faculty, error) {
 
 	return fac, nil
 }
-
 func (r *FacultyRepository) FetchStudentsByFacultyID(facultyID uint) ([]model.Student, error) {
 	var students []model.Student
-	err := r.db.
-		Where("faculty_id = ? AND deleted_at IS NULL", facultyID).
-		Find(&students).Error
-	if err != nil {
-		return nil, err
+
+	result := r.db.Raw(`
+		SELECT *
+		FROM students
+		WHERE faculty_id = ?
+		  AND deleted_at IS NULL
+	`, facultyID).Scan(&students)
+
+	if result.Error != nil {
+		return nil, result.Error
 	}
+
 	return students, nil
 }
 
+
 func (r *FacultyRepository) FetchPaidStudentsByFacultyID(facultyID uint) ([]model.Student, error) {
 	var students []model.Student
-	err := r.db.
-		Where("faculty_id = ? AND pending = ? AND deleted_at IS NULL", facultyID, false).
-		Find(&students).Error
-	if err != nil {
-		return nil, err
+
+	result := r.db.Raw(`
+		SELECT *
+		FROM students
+		WHERE faculty_id = ?
+		  AND pending = ?
+		  AND deleted_at IS NULL
+	`, facultyID, false).Scan(&students)
+
+	if result.Error != nil {
+		return nil, result.Error
 	}
+
 	return students, nil
 }
 
 func (r *FacultyRepository) FetchNonPaidStudentsByFacultyID(facultyID uint) ([]model.Student, error) {
 	var students []model.Student
-	err := r.db.
-		Where("faculty_id = ? AND pending = ? AND deleted_at IS NULL", facultyID, true).
-		Find(&students).Error
-	if err != nil {
-		return nil, err
+
+	result := r.db.Raw(`
+		SELECT *
+		FROM students
+		WHERE faculty_id = ?
+		  AND pending = ?
+		  AND deleted_at IS NULL
+	`, facultyID, true).Scan(&students)
+
+	if result.Error != nil {
+		return nil, result.Error
 	}
+
 	return students, nil
 }
 

@@ -48,7 +48,6 @@ func (cl *FacultyController) GetFacultyByIDController(c fiber.Ctx) error {
 		return helper.Error(c, 403, "Access denied: you can only access your own faculty profile")
 	}
 }
-		// for ins admin
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	checking_faculty_institution_id := cl.facultyService.GetInstitutionIDForUserRepo(facultyID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)

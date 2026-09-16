@@ -43,6 +43,7 @@ func RegisterRoutes(
 	paymentController *controller.PaymentController,
 ) {
 
+
 	app.Use(middleware.RequestResponseLogger())
 
 	app.Post("/signup/:role", userController.SignUpController)
@@ -58,7 +59,6 @@ func RegisterRoutes(
 	protected := app.Group("", middleware.AuthRequired())
 
 	protected.Get("/profile", userController.GetProfile)
-	// protected.Post("/users/assign-role", middleware.RequirePermission(constants.PermissionAssignRoles), userController.AssignRoleController)
 
 	roleRoute := protected.Group("/roles", middleware.RequirePermission(constants.PermissionAssignRoles))
 	roleRoute.Post("", roleController.CreateRoleController)
@@ -122,8 +122,6 @@ func RegisterRoutes(
 	StudentRoute.Patch("/:id<min(1)>", middleware.RequirePermission(constants.PermissionUpdateStudents), studentController.UpdateStudentSemesterController)
 	StudentRoute.Delete("/:id<min(1)>", middleware.RequirePermission(constants.PermissionDeleteStudents), studentController.DeleteStudentControllers)
 
-	// val:=app.RegisterCustomConstraint
-	
 	userRoute := protected.Group("/users")
 	userRoute.Delete("/:id<min(1)>", middleware.RequirePermission(constants.PermissionAssignRoles), userController.DeleteUserController)
 

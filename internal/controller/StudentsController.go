@@ -70,16 +70,19 @@ func (cl *StudentController) GetStudentByIDControllers(c fiber.Ctx) error {
 		return helper.Error(c, 400, "invalid student ID")
 	}
 	studentID := uint(id)
-
+	isSuperAdmin:=cl.userService.IsSuperAdminService(userID )
+   
 	logginedUserStudentID, _ := cl.studentService.GetUserStudentIDService(userID)
+
+	 if !isSuperAdmin{
 	if logginedUserStudentID != studentID {
 		return helper.Error(c, 403, "Cant able to access other student")
-	}
+	}}
 
 	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
 	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
 	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(studentID)
-	isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
+	
 	if !isSuperAdmin{
 	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
 		return helper.Error(c, 403, "Cant able to access other institution")
