@@ -56,9 +56,7 @@ func main() {
 	}
 
 	port := os.Getenv("APP_PORT")
-	if port == "" {
-		port = "8090"
-	}
+	
 	log.Printf("Server starting on :%s", port)
 
 	log.Fatal(app.Listen(":" + port))

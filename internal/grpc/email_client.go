@@ -24,9 +24,7 @@ func ConnectService() error {
 	}
 
 	port := os.Getenv("NOTIFICATION_GRPC_PORT")
-	if port == "" {
-		port = "15052"
-	}
+	
 
 	conn, err := grpc.NewClient(
 		host+":"+port,

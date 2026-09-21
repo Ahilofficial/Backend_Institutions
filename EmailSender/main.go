@@ -35,9 +35,6 @@ func main() {
 	)
 
 	port := os.Getenv("NOTIFICATION_GRPC_PORT")
-	if port == "" {
-		port = "15052"
-	}
 
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
