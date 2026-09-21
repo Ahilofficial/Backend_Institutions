@@ -50,61 +50,58 @@ func (cl *PaymentController) CreateDepartmentPaymentController(c fiber.Ctx) erro
 }
 
 func (cl *PaymentController) UpdateDepartmentPaymentController(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok || userID == 0 {
+    userID,ok := c.Locals("user_id").(uint)
+    if !ok || userID == 0 {
 		return helper.Error(c, 401, "unauthorized user")
 	}
+    id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+    if err != nil || id == 0 {
+        return helper.Error(c, 400, "invalid payment id")
+    }
 
-	idStr := c.Params("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil || id == 0 {
-		return helper.Error(c, 400, "invalid payment id")
-	}
+    var body dto.UpdateDepartmentPaymentDTO
+    if err := c.Bind().Body(&body); err != nil {
+        return helper.Error(c, 400, "invalid request body")
+    }
 
-	var body dto.UpdateDepartmentPaymentDTO
-	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid request body: "+err.Error())
-	}
+    body.Sanitize()
 
-	body.Sanitize()
-	if err := body.Validate(); err != nil {
-		return helper.Error(c, 400, err.Error())
-	}
+    if err := body.Validate(); err != nil {
+        return helper.Error(c, 400, err.Error())
+    }
 
-	updated, err := cl.paymentService.UpdateDepartmentPayment(userID, uint(id), &body)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cant able to manage") ||
-			strings.Contains(strings.ToLower(err.Error()), "only institution admin") {
-			return helper.Error(c, 403, err.Error())
-		}
-		return helper.Error(c, 400, err.Error())
-	}
+    updated, err := cl.paymentService.UpdateDepartmentPayment(
+        userID,
+        uint(id),
+        &body,
+    )
+    if err != nil {
+        return helper.Error(c, 400, err.Error())
+    }
 
-	return helper.Success(c, "Department payment updated successfully", dto.ToDepartmentPaymentResponseDTO(updated))
+    return helper.Success(
+        c,
+        "Department payment updated successfully",
+        dto.ToDepartmentPaymentResponseDTO(updated),
+    )
 }
 
 func (cl *PaymentController) DeleteDepartmentPaymentController(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok || userID == 0 {
-		return helper.Error(c, 401, "unauthorized user")
-	}
+    userID := c.Locals("user_id").(uint)
 
-	idStr := c.Params("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil || id == 0 {
-		return helper.Error(c, 400, "invalid payment id")
-	}
+    id, err := strconv.ParseUint(c.Params("id"), 10, 32)
+    if err != nil || id == 0 {
+        return helper.Error(c, 400, "invalid payment id")
+    }
 
-	if err := cl.paymentService.DeleteDepartmentPayment(userID, uint(id)); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cant able to manage") ||
-			strings.Contains(strings.ToLower(err.Error()), "only institution admin") {
-			return helper.Error(c, 403, err.Error())
-		}
-		return helper.Error(c, 400, err.Error())
-	}
+    err = cl.paymentService.DeleteDepartmentPayment(userID, uint(id))
+    if err != nil {
+        return helper.Error(c, 400, err.Error())
+    }
 
-	return helper.Success(c, "Department payment deleted successfully", nil)
+    return helper.Success(c, "Department payment deleted successfully", nil)
 }
+
 
 func (cl *PaymentController) GetDepartmentPaymentBySemesterController(c fiber.Ctx) error {
 	deptIDStr := c.Params("departmentId")
@@ -143,27 +140,25 @@ func (cl *PaymentController) GetDepartmentPaymentsController(c fiber.Ctx) error 
 }
 
 func (cl *PaymentController) CreateStudentPaymentController(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(uint)
-	if !ok || userID == 0 {
-		return helper.Error(c, 401, "unauthorized user")
-	}
+    userID := c.Locals("user_id").(uint)
 
-	var body dto.CreateStudentPaymentDTO
-	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid request body: "+err.Error())
-	}
+    var body dto.CreateStudentPaymentDTO
+    if err := c.Bind().Body(&body); err != nil {
+        return helper.Error(c, 400, "invalid request body")
+    }
 
-	if err := body.Validate(); err != nil {
-		return helper.Error(c, 400, err.Error())
-	}
+    if err := body.Validate(); err != nil {
+        return helper.Error(c, 400, err.Error())
+    }
 
-	payment, updatedStudent, err := cl.paymentService.MakeStudentPayment(userID, &body)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cant able to make payment for other student") {
-			return helper.Error(c, 403, err.Error())
-		}
-		return helper.Error(c, 400, err.Error())
-	}
+    payment, student, err := cl.paymentService.MakeStudentPayment(userID, &body)
+    if err != nil {
+        return helper.Error(c, 400, err.Error())
+    }
 
-	return helper.Success(c, "Payment processed successfully", dto.ToStudentPaymentResponseDTO(payment, updatedStudent))
+    return helper.Success(
+        c,
+        "Payment processed successfully",
+        dto.ToStudentPaymentResponseDTO(payment, student),
+    )
 }

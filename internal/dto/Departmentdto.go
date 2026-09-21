@@ -66,9 +66,8 @@ func ToDepartmentResponseDTO(dept *model.Department) DepartmentResponseDTO {
 func ToDepartmentResponseListDTO(depts []model.Department) []DepartmentResponseDTO {
 	list := make([]DepartmentResponseDTO, len(depts))
 
-	for i := range depts {
-		list[i] = ToDepartmentResponseDTO(&depts[i])
+	for i,d := range depts {
+		list[i] = ToDepartmentResponseDTO(&d)
 	}
-
 	return list
 }

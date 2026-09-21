@@ -193,13 +193,6 @@ func ToUserResponseDTO(user *model.User) UserResponseDTO {
 	var dto UserResponseDTO
 	copier.Copy(&dto, user)
 
-	dto.StudentID = user.StudentID
-	dto.FacultyID = user.FacultyID
-
-	if len(user.Roles) > 0 {
-		dto.Role = user.Roles[0].Name
-	}
-
 	return dto
 }
 

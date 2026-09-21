@@ -4,6 +4,7 @@ import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/model"
 	"backend_institutions/internal/repository"
+	"fmt"
 )
 
 type DepartmentService struct {
@@ -24,7 +25,8 @@ func NewDepartmentService(
 func (s *DepartmentService) AddDepartmentService(
 	body *dto.CreateDepartmentDTO,
 ) (model.Department, error) {
-
+	
+    fmt.Print(body)
 	department := model.Department{
 		DepartmentName: body.DepartmentName,
 		InstitutionID:  body.InstitutionID,
@@ -82,6 +84,7 @@ func (s *DepartmentService) UpdateDepartmentService(
 ) error {
 
 	department, err := s.departmentRepo.FetchDepartmentById(id)
+	
 	if err != nil {
 		return err
 	}

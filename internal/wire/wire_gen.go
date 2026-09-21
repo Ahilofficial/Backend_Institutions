@@ -15,6 +15,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// Injectors from wire.go:
+
 func InitializeApp() (*fiber.App, error) {
 	db := database.NewDB()
 	userRepository := repository.NewUserRepository(db)
@@ -36,10 +38,10 @@ func InitializeApp() (*fiber.App, error) {
 	paymentRepository := repository.NewPaymentRepository(db)
 	studentService := services.NewStudentService(studentRepository, facultyRepository, userRepository, departmentRepository, paymentRepository)
 	studentController := controller.NewStudentController(studentService, userService, instituteService, facultyService)
-	paymentService := services.NewPaymentService(paymentRepository, institutionRepository, departmentRepository, userRepository)
-	paymentController := controller.NewPaymentController(paymentService)
 	roleService := services.NewRoleService(roleRepository)
 	roleController := controller.NewRoleController(roleService)
+	paymentService := services.NewPaymentService(paymentRepository, institutionRepository, departmentRepository, userRepository)
+	paymentController := controller.NewPaymentController(paymentService)
 	app := routes.NewApp(userController, instituteController, departmentController, facultyController, studentController, roleController, paymentController)
 	return app, nil
 }

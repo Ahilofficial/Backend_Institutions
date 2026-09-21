@@ -4,7 +4,6 @@ import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
 	"backend_institutions/internal/services"
-	"fmt"
 	"math"
 	"strconv"
 
@@ -16,12 +15,14 @@ type InstituteController struct {
 }
 
 func NewInstituteController(instituteService *services.InstituteService) *InstituteController {
-	return &InstituteController{instituteService: instituteService}
+	return &InstituteController{
+		instituteService: instituteService,
+	}
 }
 
 
 func (cl *InstituteController) CreateInstituteController(c fiber.Ctx) error {
-	fmt.Println(c.Request())
+	
 
 	var body dto.CreateInstitutionDTO
 	if err := c.Bind().Body(&body); err != nil {
@@ -50,14 +51,12 @@ func (cl *InstituteController) CreateInstituteController(c fiber.Ctx) error {
 func (cl *InstituteController) GetAllInstitutesController(c fiber.Ctx) error {
 
 	userID, _ := c.Locals("user_id").(uint)
-
 	pageStr := c.Query("page")
 	limitStr := c.Query("limit")
 
 	page := 1
 	limit := 10
-	fmt.Println(c.Request())
-
+	
 	if pageStr != "" {
 		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
 			page = p

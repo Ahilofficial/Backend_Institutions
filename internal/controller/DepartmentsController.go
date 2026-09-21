@@ -49,6 +49,7 @@ func (cl *DepartmentController) CreateDepartmentController(c fiber.Ctx) error {
 
 	}
 
+	
 	createdDept, err := cl.departmentService.AddDepartmentService(&body)
 	if err != nil {
 		return helper.Error(c, 400, err.Error())

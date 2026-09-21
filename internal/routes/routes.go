@@ -44,7 +44,7 @@ func RegisterRoutes(
 ) {
 
 
-	app.Use(middleware.RequestResponseLogger())
+	app.Use(middleware.SetupLogger())
 
 	app.Post("/signup/:role", userController.SignUpController)
 	app.Post("/signin", userController.SignInController)
@@ -55,6 +55,8 @@ func RegisterRoutes(
 	app.Post("/auth/reset-password", userController.ResetPassword)
 	app.Get("/roles", roleController.FetchRoles)
 	app.Get("/permission", roleController.FetchPermissions)
+
+    app.Post("/auth/refresh", userController.RefreshTokenController)
 
 	protected := app.Group("", middleware.AuthRequired())
 
@@ -114,12 +116,13 @@ func RegisterRoutes(
 	FacultyRoute.Put("/:id<min(1)>", middleware.RequirePermission(constants.PermissionUpdateFaculties), facultyController.UpdateFacultyController)
 	FacultyRoute.Delete("/:id<min(1)>", middleware.RequirePermission(constants.PermissionDeleteFaculties), facultyController.DeleteFacultyController)
 
+
 	StudentRoute := protected.Group("/students")
 	StudentRoute.Post("", middleware.RequirePermission(constants.PermissionCreateStudents), studentController.CreateStudentControllers)
+	StudentRoute.Post("/:id<min(1)>",middleware.RequirePermission(constants.StudentPayments) ,studentController.SemesterChange)
 	StudentRoute.Get("", middleware.RequirePermission(constants.PermissionViewStudents), studentController.FetchAllStudentsPaginatedControllers)
 	StudentRoute.Get("/:id<min(1)>", middleware.RequirePermission(constants.PermissionViewStudentsID), studentController.GetStudentByIDControllers)
 	StudentRoute.Put("/:id<min(1)>" , middleware.RequirePermission(constants.PermissionUpdateStudents), studentController.UpdateStudentController)
-	StudentRoute.Patch("/:id<min(1)>", middleware.RequirePermission(constants.PermissionUpdateStudents), studentController.UpdateStudentSemesterController)
 	StudentRoute.Delete("/:id<min(1)>", middleware.RequirePermission(constants.PermissionDeleteStudents), studentController.DeleteStudentControllers)
 
 	userRoute := protected.Group("/users")

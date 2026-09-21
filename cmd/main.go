@@ -4,7 +4,6 @@ import (
 	"backend_institutions/internal/database"
 	"backend_institutions/internal/grpc"
 	"backend_institutions/internal/model"
-
 	"backend_institutions/internal/seeds"
 	"backend_institutions/internal/wire"
 	"log"
@@ -24,7 +23,7 @@ func main() {
 
 	database.Connect()
 
-	_ = database.DB.Exec("SET FOREIGN_KEY_CHECKS = 0;").Error
+	
 
 	err = database.DB.AutoMigrate(
 		&model.Role{},
@@ -46,6 +45,11 @@ func main() {
 
 	seeds.RunSeeders()
 
+	err = grpc.ConnectService()
+	if err != nil {
+		log.Println("Failed to connect to notification gRPC service:", err)
+	}
+
 	app, err := wire.InitializeApp()
 	if err != nil {
 		log.Fatal("Failed to initialize application: ", err)
@@ -56,16 +60,11 @@ func main() {
 		port = "8090"
 	}
 	log.Printf("Server starting on :%s", port)
-	if err := grpc.ConnectLogger(); err != nil {
-	log.Println("Logger Server unavailable:", err)
-} else {
-	defer grpc.CloseLogger()
-}
-
-	err = grpc.ConnectService()
-	if err != nil {
-		log.Fatal("Failed to connect to Notification Service:", err)
-	}
 
 	log.Fatal(app.Listen(":" + port))
+	
 }
+
+	
+
+	

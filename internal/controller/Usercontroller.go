@@ -4,6 +4,7 @@ import (
 	"backend_institutions/internal/dto"
 	"backend_institutions/internal/helper"
 	"backend_institutions/internal/services"
+	"backend_institutions/internal/utils"
 	"fmt"
 	"strconv"
 	"strings"
@@ -64,6 +65,32 @@ func (cl *UserController) SignUpController(c fiber.Ctx) error {
 		msg,
 		dto.ToUserResponseDTO(&user),
 	)
+}
+
+func (cl *UserController) RefreshTokenController(c fiber.Ctx) error {
+	var tokenReq struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	if err := c.Bind().Body(&tokenReq); err != nil {
+		return helper.Error(c, 400, "invalid request body")
+	}
+
+	if tokenReq.RefreshToken == "" {
+		return helper.Error(c, 400, "refresh token is required")
+	}
+
+	newAccessToken, newRefreshToken, err :=
+		utils.RefreshTokens(tokenReq.RefreshToken)
+
+	if err != nil {
+		return helper.Error(c, 401, err.Error())
+	}
+
+	return helper.Success(c, "Tokens refreshed successfully", fiber.Map{
+		"access_token":  newAccessToken,
+		"refresh_token": newRefreshToken,
+	})
 }
 
 func (cl *UserController) SignInController(c fiber.Ctx) error {

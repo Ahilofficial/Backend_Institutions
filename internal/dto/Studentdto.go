@@ -115,3 +115,7 @@ func ToStudentResponseListDTO(studs []model.Student) []StudentResponseDTO {
 
 	return list
 }
+
+type StudentSemester struct {
+	Semester uint `json:"semester"`
+}

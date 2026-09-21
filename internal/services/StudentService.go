@@ -69,6 +69,7 @@ func (s *StudentService) CreateStudentService(
 			"semester exceeds course duration",
 		)
 	}
+	
 
 	deptPayment, err := s.paymentRepo.GetDepartmentPaymentBySemester(dept.ID, createstudent.Semester)
 	if err != nil || deptPayment == nil || deptPayment.ID == 0 {
@@ -114,6 +115,14 @@ func (s *StudentService) CreateStudentService(
 	if err := s.studentRepo.CreateStudent(&student); err != nil {
 		return nil, err
 	}
+	userStudentIDExist, err := s.userRepo.GetUserStudentID(userID)
+    if err != nil {
+    return nil, err
+}
+
+if userStudentIDExist != 0 {
+    return nil, errors.New("student already registered for this user")
+}
 
 	if err := s.userRepo.UpdateUserStudentID(
 		userID,
@@ -212,52 +221,8 @@ func (s *StudentService) DeleteStudentService(
 	return s.studentRepo.DeleteStudent(id)
 }
 
-func (s *StudentService) UpdateStudentSemesterControllerService(userID uint, id uint, dto *dto.UpdateSemesterDTO) (*model.Student, error) {
-	student, err := s.studentRepo.FetchStudentById(id)
-	if err != nil || student.ID == 0 {
-		return nil, errors.New("student not found")
-	}
-
-	dept, err := s.departmentRepo.FetchDepartmentById(student.DepartmentID)
-	if err != nil || dept.ID == 0 {
-		return nil, errors.New("department not found")
-	}
-
-	if dto.Semester > (dept.CourseDuration*2) || dto.Semester <= 0 {
-		return nil, errors.New("semester exceeds course duration")
-	}
-
-	deptPayment, err := s.paymentRepo.GetDepartmentPaymentBySemester(student.DepartmentID, dto.Semester)
-	if err != nil || deptPayment == nil || deptPayment.ID == 0 {
-		return nil, errors.New("you need to configure payment first")
-	}
-
-	collegeFee := deptPayment.CollegeAmount
-	hostelFee := 0.0
-	if student.Hosteller {
-		hostelFee = deptPayment.HostelAmount
-	}
-
-	if student.MQ {
-		collegeFee += collegeFee * 0.50
-		if student.Hosteller {
-			hostelFee += hostelFee * 0.20
-		}
-	} else if student.Scholarship {
-		collegeFee -= collegeFee * 0.25
-		if student.Hosteller {
-			hostelFee -= hostelFee * 0.25
-		}
-	}
-
-	totalFee := collegeFee + hostelFee
-	student.Semester = dto.Semester
-	student.FeeAmount = totalFee
-	student.Pending = (student.PaidAmount < totalFee)
-
-	if err := s.studentRepo.UpdateStudentById(&student); err != nil {
-		return nil, err
-	}
-
-	return &student, nil
+func(s *StudentService)ChangeSemService(dto *dto.StudentSemester, id uint)error{
+	srepo:=s.studentRepo.ChangeSemRepo(id, dto.Semester)
+	return srepo
 }
+

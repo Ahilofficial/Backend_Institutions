@@ -246,34 +246,28 @@ func (cl *StudentController) FetchAllStudentsPaginatedControllers(c fiber.Ctx) e
 		},
 	)
 }
-func (cl *StudentController) UpdateStudentSemesterController(c fiber.Ctx) error {
-	userID, _ := c.Locals("user_id").(uint)
-	sid := c.Params("id")
-	id, err := strconv.ParseUint(sid, 10, 32)
-	if err != nil || id == 0 {
-		return helper.Error(c, 400, "invalid student ID")
-	}
 
-	var body dto.UpdateSemesterDTO
-	if err := c.Bind().Body(&body); err != nil {
-		return helper.Error(c, 400, "invalid request body: "+err.Error())
-	}
-	body.Sanitize()
-	if err := body.Validate(); err != nil {
-		return helper.Error(c, 400, err.Error())
-	}
 
-	is_inst_admin := cl.instituteService.IsInstAdminService(userID)
-	loginnedUserInstitutionID := cl.instituteService.GetInstitutionIDForUserService(userID)
-	checking_user_institution_id := cl.studentService.GetInstitutionIDForUserService(uint(id))
-	if is_inst_admin && (checking_user_institution_id != loginnedUserInstitutionID) {
-		return helper.Error(c, 403, "Cant able to access other institution")
+func (cl *StudentController)SemesterChange(c fiber.Ctx)error{
+	idstr:=c.Params("id")
+	id,_:=strconv.ParseUint(idstr,10,32)
+	var body dto.StudentSemester
+	err:=c.Bind().Body(&body);
+	if err!=nil{
+		return err
 	}
+	val:=cl.studentService.ChangeSemService(&body,uint(id))
+	return val
+}
 
-	student, err := cl.studentService.UpdateStudentSemesterControllerService(userID, uint(id), &body)
+func(cl *StudentController)StudentChange(c fiber.Ctx)error{
+	idstr:=c.Params("id")
+	id,_:=strconv.ParseUint(idstr,10,32)
+	var body dto.StudentSemester
+	err:=c.Bind().Body(&body);
 	if err != nil {
-		return helper.Error(c, 400, err.Error())
+		return err
 	}
-
-	return helper.Success(c, "Student semester updated successfully", dto.ToStudentResponseDTO(student))
+	val:=cl.studentService.ChangeSemService(&body,uint(id))
+	return val
 }

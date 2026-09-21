@@ -8,10 +8,10 @@ import (
 	"os"
 	"strings"
 	"time"
-
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Get the secret key for access tokens.
 func GetJWTSecret() []byte {
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
 
@@ -22,6 +22,7 @@ func GetJWTSecret() []byte {
 	return []byte(secret)
 }
 
+// Get the secret key for refresh tokens.
 func GetJWTRefreshSecret() []byte {
 	secret := strings.TrimSpace(os.Getenv("JWT_REFRESH_SECRET"))
 
@@ -32,8 +33,8 @@ func GetJWTRefreshSecret() []byte {
 	return []byte(secret)
 }
 
+// Generate a new access token.
 func GenerateAccessToken(userID uint, sessionID string) (string, error) {
-
 	now := time.Now()
 
 	claims := jwt.MapClaims{
@@ -51,8 +52,8 @@ func GenerateAccessToken(userID uint, sessionID string) (string, error) {
 	return token.SignedString(GetJWTSecret())
 }
 
+// Generate a new refresh token.
 func GenerateRefreshToken(userID uint, sessionID string) (string, error) {
-
 	now := time.Now()
 
 	claims := jwt.MapClaims{
@@ -84,62 +85,18 @@ func RefreshTokens(refreshToken string) (string, string, error) {
 		},
 	)
 
-	if err != nil || !token.Valid {
-		token, err = jwt.Parse(
-			refreshToken,
-			func(token *jwt.Token) (interface{}, error) {
-
-				if token.Method != jwt.SigningMethodHS256 {
-					return nil, errors.New("unexpected signing method")
-				}
-
-				return GetJWTSecret(), nil
-			},
-		)
-	}
 
 	if err != nil || !token.Valid {
-		var unvalidatedClaims jwt.MapClaims
-		token, err = jwt.ParseWithClaims(
-			refreshToken,
-			&unvalidatedClaims,
-			func(token *jwt.Token) (interface{}, error) {
-
-				if token.Method != jwt.SigningMethodHS256 {
-					return nil, errors.New("unexpected signing method")
-				}
-
-				return GetJWTRefreshSecret(), nil
-			},
-			jwt.WithoutClaimsValidation(),
-		)
-
-		if err != nil || token == nil {
-			token, err = jwt.ParseWithClaims(
-				refreshToken,
-				&unvalidatedClaims,
-				func(token *jwt.Token) (interface{}, error) {
-
-					if token.Method != jwt.SigningMethodHS256 {
-						return nil, errors.New("unexpected signing method")
-					}
-
-					return GetJWTSecret(), nil
-				},
-				jwt.WithoutClaimsValidation(),
-			)
-		}
-	}
-
-	if err != nil || token == nil {
 		return "", "", errors.New("invalid or expired refresh token")
 	}
+
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return "", "", errors.New("invalid token claims")
 	}
 
+	
 	userIDFloat, ok := claims["user_id"].(float64)
 	if !ok {
 		return "", "", errors.New("invalid user id")
@@ -158,6 +115,7 @@ func RefreshTokens(refreshToken string) (string, string, error) {
 		return "", "", err
 	}
 
+	
 	newRefreshToken, err := GenerateRefreshToken(
 		uint(userIDFloat),
 		sessionID,
@@ -169,10 +127,6 @@ func RefreshTokens(refreshToken string) (string, string, error) {
 	return newAccessToken, newRefreshToken, nil
 }
 
-func RefreshAccessToken(refreshToken string) (string, error) {
-	newAccessToken, _, err := RefreshTokens(refreshToken)
-	return newAccessToken, err
-}
 
 func SignUpToken() string {
 	b := make([]byte, 32)

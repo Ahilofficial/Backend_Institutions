@@ -131,7 +131,7 @@ func (s *FacultyService) LoginnedUserInstitutionIDService(userID uint) uint {
 func (s *FacultyService) GetLoggedInFacultyProfile(userID uint) (*model.Faculty, error) {
 
 	facultyID, err := s.userRepo.GetUserFacultyID(userID)
-	if err != nil || facultyID == 0 {
+	if err != nil  {
 		return nil, errors.New("faculty profile not created yet for logged in user")
 	}
 
@@ -140,7 +140,7 @@ func (s *FacultyService) GetLoggedInFacultyProfile(userID uint) (*model.Faculty,
 
 func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Student, error) {
 	facultyID, err := s.GetFacultyIDForUserService(userID)
-	if err != nil || facultyID == 0 {
+	if err != nil  {
 		return nil, errors.New("faculty profile not created yet for logged in user")
 	}
 
@@ -149,7 +149,7 @@ func (s *FacultyService) GetLoggedInFacultyStudents(userID uint) ([]model.Studen
 
 func (s *FacultyService) GetPaidStudentsForFacultyService(userID uint) ([]model.Student, error) {
 	facultyID, err := s.GetFacultyIDForUserService(userID)
-	if err != nil || facultyID == 0 {
+	if err != nil  {
 		return nil, errors.New("faculty profile not created yet for logged in user")
 	}
 
@@ -158,7 +158,7 @@ func (s *FacultyService) GetPaidStudentsForFacultyService(userID uint) ([]model.
 
 func (s *FacultyService) GetNonPaidStudentsForFacultyService(userID uint) ([]model.Student, error) {
 	facultyID, err := s.GetFacultyIDForUserService(userID)
-	if err != nil || facultyID == 0 {
+	if err != nil  {
 		return nil, errors.New("faculty profile not created yet for logged in user")
 	}
 

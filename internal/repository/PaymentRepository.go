@@ -185,25 +185,25 @@ func (r *PaymentRepository) GetStudentPaymentsByStudentID(studentID uint) ([]mod
 }
 
 func (r *PaymentRepository) GetStudentByID(studentID uint) (*model.Student, error) {
-	var s model.Student
+    var s model.Student
 
-	result := r.db.Raw(`
-		SELECT *
-		FROM students
-		WHERE id = ?
-		  AND deleted_at IS NULL
-		LIMIT 1
-	`, studentID).Scan(&s)
+    result := r.db.Raw(`
+        SELECT *
+        FROM students
+        WHERE id = ?
+          AND deleted_at IS NULL
+        LIMIT 1
+    `, studentID).Scan(&s)
 
-	if result.Error != nil {
-		return nil, result.Error
-	}
+    if result.Error != nil {
+        return nil, result.Error
+    }
 
-	if result.RowsAffected == 0 {
-		return nil, gorm.ErrRecordNotFound
-	}
+    if result.RowsAffected == 0 {
+        return nil, gorm.ErrRecordNotFound
+    }
 
-	return &s, nil
+    return &s, nil
 }
 
 func (r *PaymentRepository) UpdateStudentPaymentStatus(student *model.Student) error {

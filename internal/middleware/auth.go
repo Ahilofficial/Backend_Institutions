@@ -3,6 +3,7 @@ package middleware
 import (
 	"backend_institutions/internal/helper"
 	"backend_institutions/internal/utils"
+	"fmt"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -37,10 +38,12 @@ func AuthRequired() fiber.Handler {
 			return helper.Error(c, 401, "Invalid or expired token")
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
+		claims,ok:= token.Claims.(jwt.MapClaims)
 		if !ok {
 			return helper.Error(c, 401, "Invalid token claims")
 		}
+		fmt.Println(claims)
+		
 
 		userIDFloat, ok := claims["user_id"].(float64)
 		if !ok {
@@ -56,5 +59,7 @@ func AuthRequired() fiber.Handler {
 		c.Locals("user_id", userID)
 
 		return c.Next()
+		
 	}
+	
 }

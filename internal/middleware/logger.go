@@ -1,52 +1,38 @@
 package middleware
 
 import (
-	"time"
-
-	"backend_institutions/internal/grpc"
-	"backend_institutions/internal/grpc/loggerpb"
+	"log"
+	"os"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/logger"
 )
 
-func RequestResponseLogger() fiber.Handler {
-
-	return func(c fiber.Ctx) error {
-
-		start := time.Now()
-
-		method := c.Method()
-		endpoint := c.OriginalURL()
-		ip := c.IP()
-
-		requestBody := string(c.Body())
-
-		err := c.Next()
-
-		status := c.Response().StatusCode()
-		responseBody := string(c.Response().Body())
-
-		duration := time.Since(start)
-
-		errorMessage := ""
-
-		if err != nil {
-			errorMessage = err.Error()
-		}
-
-		grpc.SendLog(&loggerpb.LogRequest{
-			Time:         time.Now().Format("2006-01-02 15:04:05"),
-			Service:      "institution-service",
-			Method:       method,
-			Endpoint:     endpoint,
-			Status:       int32(status),
-			Latency:      duration.String(),
-			Ip:           ip,
-			RequestBody:  requestBody,
-			ResponseBody: responseBody,
-			Error:        errorMessage,
-		})
-
-		return err
+func SetupLogger() fiber.Handler {
+	accessLog, err := os.OpenFile(
+		"./access.log",
+		os.O_WRONLY|os.O_CREATE|os.O_APPEND,
+		0666,
+	)
+	if err != nil {
+		log.Fatalf("error opening access.log file: %v", err)
 	}
+
+	logger := logger.New(logger.Config{
+		Format: `{
+  "time": "${time}",
+  "url": "${url}"
+  "status": ${status},
+  "method": "${method}",
+  "path": "${path}",
+  "request_body": "${body}",
+  "response_body": "${resBody}"
+}
+`,
+		TimeFormat: "02-Jan-2006 15:04:05",
+		TimeZone:   "Asia/Kolkata",
+		Stream:     accessLog,
+	})
+
+	return logger
 }

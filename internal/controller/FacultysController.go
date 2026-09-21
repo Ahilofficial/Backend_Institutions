@@ -207,7 +207,7 @@ func (cl *FacultyController) UpdateFacultyController(c fiber.Ctx) error {
 	if !ok {
 		return helper.Error(c, 401, "Invalid user")
 	}
-isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
+   isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
 	idParam := c.Params("id")
 	id, err := strconv.ParseUint(idParam, 10, 32)
 	if err != nil || id == 0 {
@@ -235,6 +235,7 @@ isSuperAdmin:=cl.userService.IsSuperAdminService(userID)
 	if err := c.Bind().Body(&body); err != nil {
 		return helper.Error(c, 400, "Invalid request body")
 	}
+	
 
 	body.Sanitize()
 	if err := body.Validate(); err != nil {

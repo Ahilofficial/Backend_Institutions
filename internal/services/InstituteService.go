@@ -66,6 +66,7 @@ func (s *InstituteService) GetInstituteServiceById(
 
 	id uint,
 ) (model.Institutions, error) {
+	
 
 	return s.instituterepo.FetchInstitutionById(id)
 }
